@@ -26,6 +26,7 @@ interface Alarm {
   minute: number;
   second: number;
   enabled: boolean;
+  recurring: boolean;
 }
 
 let alarms: Alarm[] = [];
@@ -80,8 +81,8 @@ function createTextIcon(text: string): Electron.NativeImage {
   const canvas = createCanvas(size, size);
   const ctx = canvas.getContext('2d');
   
-  // Фиолетовый фон
-  const bgColor = '#7c3aed';
+  // Приглушенный синий фон (соответствует цвету фона окна)
+  const bgColor = '#5b7fa6';
   const textColor = '#FFFFFF';
   
   // Рисуем фон
@@ -181,14 +182,26 @@ function checkAlarms(): void {
   for (const alarm of alarms) {
     if (!alarm.enabled) continue;
     
-    // Проверяем, не сработал ли уже этот будильник сегодня
-    if (triggeredAlarmsToday.has(alarm.id)) continue;
+    // Проверяем, не сработал ли уже этот будильник сегодня (только для повторяющихся)
+    if (alarm.recurring && triggeredAlarmsToday.has(alarm.id)) continue;
     
     // Проверяем точное время (час, минута и секунда)
     if (alarm.hour === currentHour && alarm.minute === currentMinute && alarm.second === currentSecond) {
       // Триггерим будильник
       triggerAlarm(alarm);
-      triggeredAlarmsToday.add(alarm.id);
+      
+      // Если будильник повторяющийся, добавляем в список сработавших сегодня
+      if (alarm.recurring) {
+        triggeredAlarmsToday.add(alarm.id);
+      } else {
+        // Если будильник неповторяющийся, отключаем его после срабатывания
+        const index = alarms.findIndex(a => a.id === alarm.id);
+        if (index !== -1) {
+          alarms[index].enabled = false;
+          updateTrayIcon();
+          sendAlarmsToRenderer();
+        }
+      }
     }
   }
 }
@@ -238,10 +251,10 @@ function createAppIcon(): Electron.NativeImage {
   const canvas = createCanvas(size, size);
   const ctx = canvas.getContext('2d');
   
-  // Градиентный фон (фиолетовый)
+  // Градиентный фон (приглушенный синий)
   const gradient = ctx.createLinearGradient(0, 0, size, size);
-  gradient.addColorStop(0, '#667eea');
-  gradient.addColorStop(1, '#764ba2');
+  gradient.addColorStop(0, '#5b7fa6');
+  gradient.addColorStop(1, '#4a6fa5');
   
   // Рисуем закругленный прямоугольник
   const radius = size * 0.15;
