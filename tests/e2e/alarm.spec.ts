@@ -68,6 +68,7 @@ test.describe('Alarm Application', () => {
     // Проверяем, что поля ввода времени присутствуют
     await expect(window.locator('#newHour')).toBeVisible();
     await expect(window.locator('#newMinute')).toBeVisible();
+    await expect(window.locator('#newSecond')).toBeVisible();
     await expect(window.locator('#addAlarmBtn')).toBeVisible();
     
     // Проверяем, что список будильников пуст
@@ -76,9 +77,10 @@ test.describe('Alarm Application', () => {
   });
 
   test('должен добавлять новый будильник', async () => {
-    // Устанавливаем время 14:30
+    // Устанавливаем время 14:30:00
     await window.fill('#newHour', '14');
     await window.fill('#newMinute', '30');
+    await window.fill('#newSecond', '00');
     
     // Добавляем будильник
     await window.click('#addAlarmBtn');
@@ -88,7 +90,7 @@ test.describe('Alarm Application', () => {
     
     // Проверяем, что будильник появился в списке
     const alarmsList = window.locator('#alarmsList');
-    await expect(alarmsList).toContainText('14:30');
+    await expect(alarmsList).toContainText('14:30:00');
     await expect(alarmsList).not.toContainText('Нет установленных будильников');
   });
 
@@ -96,42 +98,46 @@ test.describe('Alarm Application', () => {
     // Добавляем первый будильник
     await window.fill('#newHour', '08');
     await window.fill('#newMinute', '00');
+    await window.fill('#newSecond', '00');
     await window.click('#addAlarmBtn');
     await window.waitForTimeout(300);
     
     // Добавляем второй будильник
     await window.fill('#newHour', '12');
     await window.fill('#newMinute', '15');
+    await window.fill('#newSecond', '00');
     await window.click('#addAlarmBtn');
     await window.waitForTimeout(300);
     
     // Добавляем третий будильник
     await window.fill('#newHour', '18');
     await window.fill('#newMinute', '45');
+    await window.fill('#newSecond', '00');
     await window.click('#addAlarmBtn');
     await window.waitForTimeout(300);
     
     // Проверяем, что все будильники присутствуют
     const alarmsList = window.locator('#alarmsList');
-    await expect(alarmsList).toContainText('08:00');
-    await expect(alarmsList).toContainText('12:15');
-    await expect(alarmsList).toContainText('18:45');
+    await expect(alarmsList).toContainText('08:00:00');
+    await expect(alarmsList).toContainText('12:15:00');
+    await expect(alarmsList).toContainText('18:45:00');
   });
 
   test('должен редактировать будильник', async () => {
     // Добавляем будильник
     await window.fill('#newHour', '10');
     await window.fill('#newMinute', '00');
+    await window.fill('#newSecond', '00');
     await window.click('#addAlarmBtn');
     await window.waitForTimeout(500);
     
     // Проверяем, что будильник добавлен
     const alarmsList = window.locator('#alarmsList');
-    await expect(alarmsList).toContainText('10:00');
+    await expect(alarmsList).toContainText('10:00:00');
     
-    // Находим кнопку редактирования для будильника 10:00
+    // Находим кнопку редактирования для будильника 10:00:00
     // Используем более надежный селектор
-    const editBtn = window.locator('.alarm-item:has-text("10:00")').locator('button:has-text("Редактировать")');
+    const editBtn = window.locator('.alarm-item:has-text("10:00:00")').locator('button:has-text("Редактировать")');
     await editBtn.click();
     await window.waitForTimeout(500);
     
@@ -140,13 +146,16 @@ test.describe('Alarm Application', () => {
     const editingItem = window.locator('.alarm-item.editing');
     const hourInput = editingItem.locator('input.hour-input');
     const minuteInput = editingItem.locator('input.minute-input');
+    const secondInput = editingItem.locator('input.second-input');
     
     await expect(hourInput).toBeVisible({ timeout: 5000 });
     await expect(minuteInput).toBeVisible({ timeout: 5000 });
+    await expect(secondInput).toBeVisible({ timeout: 5000 });
     
     // Изменяем время
     await hourInput.fill('15');
     await minuteInput.fill('30');
+    await secondInput.fill('45');
     
     // Сохраняем
     const saveBtn = editingItem.locator('button:has-text("Сохранить")');
@@ -154,13 +163,14 @@ test.describe('Alarm Application', () => {
     await window.waitForTimeout(500);
     
     // Проверяем, что время изменилось
-    await expect(alarmsList).toContainText('15:30');
+    await expect(alarmsList).toContainText('15:30:45');
   });
 
   test('должен отменять редактирование будильника', async () => {
     // Добавляем будильник
     await window.fill('#newHour', '09');
     await window.fill('#newMinute', '00');
+    await window.fill('#newSecond', '00');
     await window.click('#addAlarmBtn');
     await window.waitForTimeout(500);
     
@@ -172,8 +182,10 @@ test.describe('Alarm Application', () => {
     // Изменяем время
     const hourInput = window.locator('input[class*="hour-input"]').first();
     const minuteInput = window.locator('input[class*="minute-input"]').first();
+    const secondInput = window.locator('input[class*="second-input"]').first();
     await hourInput.fill('20');
     await minuteInput.fill('00');
+    await secondInput.fill('00');
     
     // Отменяем редактирование
     const cancelBtn = window.locator('button:has-text("Отмена")').first();
@@ -182,20 +194,21 @@ test.describe('Alarm Application', () => {
     
     // Проверяем, что время не изменилось
     const alarmsList = window.locator('#alarmsList');
-    await expect(alarmsList).toContainText('09:00');
-    await expect(alarmsList).not.toContainText('20:00');
+    await expect(alarmsList).toContainText('09:00:00');
+    await expect(alarmsList).not.toContainText('20:00:00');
   });
 
   test('должен удалять будильник', async () => {
     // Добавляем будильник
     await window.fill('#newHour', '11');
     await window.fill('#newMinute', '00');
+    await window.fill('#newSecond', '00');
     await window.click('#addAlarmBtn');
     await window.waitForTimeout(500);
     
     // Проверяем, что будильник присутствует
     const alarmsList = window.locator('#alarmsList');
-    await expect(alarmsList).toContainText('11:00');
+    await expect(alarmsList).toContainText('11:00:00');
     
     // Устанавливаем обработчик для диалога подтверждения перед кликом
     const dialogPromise = new Promise<void>((resolve) => {
@@ -206,7 +219,7 @@ test.describe('Alarm Application', () => {
     });
     
     // Удаляем будильник
-    const deleteBtn = window.locator('.alarm-item:has-text("11:00")').locator('button:has-text("Удалить")');
+    const deleteBtn = window.locator('.alarm-item:has-text("11:00:00")').locator('button:has-text("Удалить")');
     await deleteBtn.click();
     
     // Ждем обработки диалога
@@ -214,18 +227,19 @@ test.describe('Alarm Application', () => {
     await window.waitForTimeout(500);
     
     // Проверяем, что будильник удален
-    await expect(alarmsList).not.toContainText('11:00');
+    await expect(alarmsList).not.toContainText('11:00:00');
   });
 
   test('должен включать и выключать будильник', async () => {
     // Добавляем будильник
     await window.fill('#newHour', '13');
     await window.fill('#newMinute', '00');
+    await window.fill('#newSecond', '00');
     await window.click('#addAlarmBtn');
     await window.waitForTimeout(500);
     
     // Находим переключатель для этого будильника
-    const alarmItem = window.locator('.alarm-item:has-text("13:00")');
+    const alarmItem = window.locator('.alarm-item:has-text("13:00:00")');
     const toggle = alarmItem.locator('input[type="checkbox"]');
     
     // Проверяем, что будильник включен по умолчанию
@@ -252,6 +266,7 @@ test.describe('Alarm Application', () => {
     // Пробуем установить недопустимое значение часа
     await window.fill('#newHour', '25');
     await window.fill('#newMinute', '00');
+    await window.fill('#newSecond', '00');
     
     // Устанавливаем обработчик для alert
     const alertPromise = new Promise<string>((resolve) => {
@@ -275,16 +290,19 @@ test.describe('Alarm Application', () => {
     // Добавляем будильники в произвольном порядке
     await window.fill('#newHour', '20');
     await window.fill('#newMinute', '00');
+    await window.fill('#newSecond', '00');
     await window.click('#addAlarmBtn');
     await window.waitForTimeout(300);
     
     await window.fill('#newHour', '08');
     await window.fill('#newMinute', '00');
+    await window.fill('#newSecond', '00');
     await window.click('#addAlarmBtn');
     await window.waitForTimeout(300);
     
     await window.fill('#newHour', '12');
     await window.fill('#newMinute', '00');
+    await window.fill('#newSecond', '00');
     await window.click('#addAlarmBtn');
     await window.waitForTimeout(300);
     
@@ -293,9 +311,9 @@ test.describe('Alarm Application', () => {
     const text = await alarmsList.textContent();
     
     // Проверяем порядок появления времени в тексте
-    const index08 = text!.indexOf('08:00');
-    const index12 = text!.indexOf('12:00');
-    const index20 = text!.indexOf('20:00');
+    const index08 = text!.indexOf('08:00:00');
+    const index12 = text!.indexOf('12:00:00');
+    const index20 = text!.indexOf('20:00:00');
     
     expect(index08).toBeLessThan(index12);
     expect(index12).toBeLessThan(index20);
@@ -378,12 +396,13 @@ test.describe('Alarm Application', () => {
     // Добавляем будильник
     await window.fill('#newHour', '16');
     await window.fill('#newMinute', '00');
+    await window.fill('#newSecond', '00');
     await window.click('#addAlarmBtn');
     await window.waitForTimeout(500);
 
     // Проверяем, что будильник присутствует
     const alarmsListBefore = window.locator('#alarmsList');
-    await expect(alarmsListBefore).toContainText('16:00');
+    await expect(alarmsListBefore).toContainText('16:00:00');
 
     // Сворачиваем в трей
     await electronApp.evaluate(() => {
@@ -414,7 +433,7 @@ test.describe('Alarm Application', () => {
 
     // Проверяем, что будильник все еще присутствует
     const alarmsListAfter = window.locator('#alarmsList');
-    await expect(alarmsListAfter).toContainText('16:00');
+    await expect(alarmsListAfter).toContainText('16:00:00');
   });
 });
 

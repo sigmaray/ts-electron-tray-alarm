@@ -3,6 +3,7 @@ interface Alarm {
   id: string;
   hour: number;
   minute: number;
+  second: number;
   enabled: boolean;
 }
 
@@ -26,8 +27,8 @@ function generateAlarmId(): string {
   return `alarm-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 }
 
-function formatTime(hour: number, minute: number): string {
-  return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+function formatTime(hour: number, minute: number, second: number): string {
+  return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:${String(second).padStart(2, '0')}`;
 }
 
 function renderAlarms(): void {
@@ -42,12 +43,13 @@ function renderAlarms(): void {
   // Сортируем будильники по времени
   const sortedAlarms = [...alarms].sort((a, b) => {
     if (a.hour !== b.hour) return a.hour - b.hour;
-    return a.minute - b.minute;
+    if (a.minute !== b.minute) return a.minute - b.minute;
+    return a.second - b.second;
   });
 
   container.innerHTML = sortedAlarms.map(alarm => {
     const isEditing = editingAlarmId === alarm.id;
-    const timeStr = formatTime(alarm.hour, alarm.minute);
+    const timeStr = formatTime(alarm.hour, alarm.minute, alarm.second);
     
     if (isEditing) {
       return `
@@ -56,6 +58,8 @@ function renderAlarms(): void {
             <input type="number" min="0" max="23" value="${alarm.hour}" class="hour-input" id="edit-hour-${alarm.id}">
             <span>:</span>
             <input type="number" min="0" max="59" value="${alarm.minute}" class="minute-input" id="edit-minute-${alarm.id}">
+            <span>:</span>
+            <input type="number" min="0" max="59" value="${alarm.second}" class="second-input" id="edit-second-${alarm.id}">
           </div>
           <div class="alarm-actions">
             <button class="btn-save" onclick="saveAlarm('${alarm.id}')">Сохранить</button>
@@ -86,11 +90,13 @@ function renderAlarms(): void {
 function addAlarm(): void {
   const hourInput = document.getElementById('newHour') as HTMLInputElement;
   const minuteInput = document.getElementById('newMinute') as HTMLInputElement;
+  const secondInput = document.getElementById('newSecond') as HTMLInputElement;
   
-  if (!hourInput || !minuteInput) return;
+  if (!hourInput || !minuteInput || !secondInput) return;
 
   const hour = parseInt(hourInput.value, 10);
   const minute = parseInt(minuteInput.value, 10);
+  const second = parseInt(secondInput.value, 10);
 
   if (isNaN(hour) || hour < 0 || hour > 23) {
     alert('Введите корректный час (0-23)');
@@ -102,10 +108,16 @@ function addAlarm(): void {
     return;
   }
 
+  if (isNaN(second) || second < 0 || second > 59) {
+    alert('Введите корректные секунды (0-59)');
+    return;
+  }
+
   const newAlarm: Alarm = {
     id: generateAlarmId(),
     hour,
     minute,
+    second,
     enabled: true,
   };
 
@@ -117,6 +129,7 @@ function addAlarm(): void {
   // Сбрасываем поля ввода
   hourInput.value = '00';
   minuteInput.value = '00';
+  secondInput.value = '00';
 }
 
 function editAlarm(alarmId: string): void {
@@ -132,11 +145,13 @@ function cancelEdit(alarmId: string): void {
 function saveAlarm(alarmId: string): void {
   const hourInput = document.getElementById(`edit-hour-${alarmId}`) as HTMLInputElement;
   const minuteInput = document.getElementById(`edit-minute-${alarmId}`) as HTMLInputElement;
+  const secondInput = document.getElementById(`edit-second-${alarmId}`) as HTMLInputElement;
 
-  if (!hourInput || !minuteInput) return;
+  if (!hourInput || !minuteInput || !secondInput) return;
 
   const hour = parseInt(hourInput.value, 10);
   const minute = parseInt(minuteInput.value, 10);
+  const second = parseInt(secondInput.value, 10);
 
   if (isNaN(hour) || hour < 0 || hour > 23) {
     alert('Введите корректный час (0-23)');
@@ -148,6 +163,11 @@ function saveAlarm(alarmId: string): void {
     return;
   }
 
+  if (isNaN(second) || second < 0 || second > 59) {
+    alert('Введите корректные секунды (0-59)');
+    return;
+  }
+
   const alarm = alarms.find(a => a.id === alarmId);
   if (!alarm) return;
 
@@ -155,6 +175,7 @@ function saveAlarm(alarmId: string): void {
     ...alarm,
     hour,
     minute,
+    second,
   };
 
   const electronAPI = (window as any).electronAPI as ElectronAPI | undefined;
@@ -216,7 +237,7 @@ document.addEventListener('DOMContentLoaded', () => {
     electronAPI.onAlarmTriggered((alarmId) => {
       const alarm = alarms.find(a => a.id === alarmId);
       if (alarm) {
-        alert(`⏰ Будильник! Время: ${formatTime(alarm.hour, alarm.minute)}`);
+        alert(`⏰ Будильник! Время: ${formatTime(alarm.hour, alarm.minute, alarm.second)}`);
       }
     });
   }
@@ -224,6 +245,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // Обработка Enter в полях ввода
   const hourInput = document.getElementById('newHour') as HTMLInputElement;
   const minuteInput = document.getElementById('newMinute') as HTMLInputElement;
+  const secondInput = document.getElementById('newSecond') as HTMLInputElement;
   const addBtn = document.getElementById('addAlarmBtn');
 
   if (hourInput) {
@@ -236,6 +258,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
   if (minuteInput) {
     minuteInput.addEventListener('keypress', (e: KeyboardEvent) => {
+      if (e.key === 'Enter') {
+        secondInput?.focus();
+      }
+    });
+  }
+
+  if (secondInput) {
+    secondInput.addEventListener('keypress', (e: KeyboardEvent) => {
       if (e.key === 'Enter' && addBtn) {
         addAlarm();
       }

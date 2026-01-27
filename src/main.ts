@@ -24,6 +24,7 @@ interface Alarm {
   id: string;
   hour: number;
   minute: number;
+  second: number;
   enabled: boolean;
 }
 
@@ -102,7 +103,7 @@ function createTextIcon(text: string): Electron.NativeImage {
 function getTimeUntilAlarm(alarm: Alarm): number {
   const now = new Date();
   const alarmTime = new Date();
-  alarmTime.setHours(alarm.hour, alarm.minute, 0, 0);
+  alarmTime.setHours(alarm.hour, alarm.minute, alarm.second, 0);
   
   // Если время будильника уже прошло сегодня, берем завтрашний день
   if (alarmTime <= now) {
@@ -155,7 +156,7 @@ function updateTrayIcon(): void {
     const icon = createTextIcon(text);
     tray.setImage(icon);
     
-    const alarmTime = `${String(nearestAlarm.hour).padStart(2, '0')}:${String(nearestAlarm.minute).padStart(2, '0')}`;
+    const alarmTime = `${String(nearestAlarm.hour).padStart(2, '0')}:${String(nearestAlarm.minute).padStart(2, '0')}:${String(nearestAlarm.second).padStart(2, '0')}`;
     tray.setToolTip(`Будильник: ${alarmTime} (через ${formatTimeForTray(timeUntil)})`);
   } else {
     const icon = createTextIcon('—');
@@ -169,6 +170,7 @@ function checkAlarms(): void {
   const currentDate = now.toDateString();
   const currentHour = now.getHours();
   const currentMinute = now.getMinutes();
+  const currentSecond = now.getSeconds();
   
   // Сбрасываем множество сработавших будильников при смене дня
   if (lastTriggeredDate !== currentDate) {
@@ -182,8 +184,8 @@ function checkAlarms(): void {
     // Проверяем, не сработал ли уже этот будильник сегодня
     if (triggeredAlarmsToday.has(alarm.id)) continue;
     
-    // Проверяем точное время (только минута, без секунд)
-    if (alarm.hour === currentHour && alarm.minute === currentMinute) {
+    // Проверяем точное время (час, минута и секунда)
+    if (alarm.hour === currentHour && alarm.minute === currentMinute && alarm.second === currentSecond) {
       // Триггерим будильник
       triggerAlarm(alarm);
       triggeredAlarmsToday.add(alarm.id);
@@ -196,7 +198,7 @@ function triggerAlarm(alarm: Alarm): void {
   if (Notification.isSupported()) {
     const notification = new Notification({
       title: '⏰ Будильник!',
-      body: `Время: ${String(alarm.hour).padStart(2, '0')}:${String(alarm.minute).padStart(2, '0')}`,
+      body: `Время: ${String(alarm.hour).padStart(2, '0')}:${String(alarm.minute).padStart(2, '0')}:${String(alarm.second).padStart(2, '0')}`,
       urgency: 'critical',
     });
     notification.show();
