@@ -85,15 +85,20 @@ function renderAlarms(): void {
           <div class="alarm-info">
             <span class="alarm-time">${timeStr}</span>
             <div class="alarm-toggles">
-              <label class="alarm-toggle" title="Включить/выключить будильник">
-                <input type="checkbox" ${alarm.enabled ? 'checked' : ''} onchange="toggleAlarm('${alarm.id}', this.checked)">
-                <span class="toggle-slider"></span>
-              </label>
-              <label class="alarm-toggle recurring-toggle" title="Повторяющийся будильник">
-                <input type="checkbox" ${alarm.recurring ? 'checked' : ''} onchange="toggleRecurring('${alarm.id}', this.checked)">
-                <span class="toggle-slider"></span>
+              <div class="toggle-group">
+                <label class="alarm-toggle with-label" title="Включить/выключить будильник">
+                  <input type="checkbox" ${alarm.enabled ? 'checked' : ''} onchange="toggleAlarm('${alarm.id}', this.checked)">
+                  <span class="toggle-slider"></span>
+                </label>
+                <span class="toggle-label">Вкл</span>
+              </div>
+              <div class="toggle-group">
+                <label class="alarm-toggle recurring-toggle with-label" title="Повторяющийся будильник">
+                  <input type="checkbox" ${alarm.recurring ? 'checked' : ''} onchange="toggleRecurring('${alarm.id}', this.checked)">
+                  <span class="toggle-slider"></span>
+                </label>
                 <span class="toggle-label">Повтор</span>
-              </label>
+              </div>
             </div>
           </div>
           <div class="alarm-actions">
