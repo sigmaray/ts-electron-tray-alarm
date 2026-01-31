@@ -66,13 +66,6 @@ function renderAlarms(): void {
             <span>:</span>
             <input type="number" min="0" max="59" value="${alarm.second}" class="second-input" id="edit-second-${alarm.id}">
           </div>
-          <div class="alarm-recurring-edit">
-            <label class="alarm-toggle recurring-toggle">
-              <input type="checkbox" ${alarm.recurring ? 'checked' : ''} id="edit-recurring-${alarm.id}">
-              <span class="toggle-slider"></span>
-              <span class="toggle-label">Повторяющийся</span>
-            </label>
-          </div>
           <div class="alarm-actions">
             <button class="btn-save" onclick="saveAlarm('${alarm.id}')">Сохранить</button>
             <button class="btn-cancel" onclick="cancelEdit('${alarm.id}')">Отмена</button>
@@ -202,15 +195,13 @@ function saveAlarm(alarmId: string): void {
   const alarm = alarms.find(a => a.id === alarmId);
   if (!alarm) return;
 
-  const recurringInput = document.getElementById(`edit-recurring-${alarmId}`) as HTMLInputElement;
-  const recurring = recurringInput ? recurringInput.checked : alarm.recurring;
-
+  // При редактировании сохраняем текущее значение recurring (не меняем его)
   const updatedAlarm: Alarm = {
     ...alarm,
     hour,
     minute,
     second,
-    recurring,
+    // recurring остается без изменений
   };
 
   const electronAPI = (window as any).electronAPI as ElectronAPI | undefined;

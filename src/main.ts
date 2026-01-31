@@ -89,9 +89,26 @@ function createTextIcon(text: string): Electron.NativeImage {
   ctx.fillStyle = bgColor;
   ctx.fillRect(0, 0, size, size);
   
+  // Подбираем размер шрифта в зависимости от длины текста
+  const maxWidth = size - 4; // Оставляем отступы по 2px с каждой стороны
+  let fontSize = 14; // Начальный размер шрифта
+  let textWidth = 0;
+  
+  // Уменьшаем размер шрифта, пока текст не влезет
+  do {
+    ctx.font = `bold ${fontSize}px Arial`;
+    const metrics = ctx.measureText(text);
+    textWidth = metrics.width;
+    
+    if (textWidth > maxWidth && fontSize > 6) {
+      fontSize -= 0.5;
+    } else {
+      break;
+    }
+  } while (textWidth > maxWidth && fontSize > 6);
+  
   // Рисуем текст
   ctx.fillStyle = textColor;
-  ctx.font = 'bold 12px Arial';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillText(text, size / 2, size / 2);
@@ -141,9 +158,17 @@ function formatTimeForTray(seconds: number): string {
     return `${mins}m`;
   }
   
-  // Для больших значений показываем в часах с одной десятичной цифрой
+  // Для больших значений показываем в часах с округлением
   const hours = seconds / 3600;
-  return `${hours.toFixed(1)}h`;
+  const roundedHours = Math.round(hours);
+  
+  // Если округленное значение равно исходному (целое число), показываем без десятичной части
+  if (roundedHours === hours) {
+    return `${roundedHours}h`;
+  }
+  
+  // Иначе показываем округленное значение
+  return `${roundedHours}h`;
 }
 
 function updateTrayIcon(): void {
