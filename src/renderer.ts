@@ -15,6 +15,7 @@ interface ElectronAPI {
   updateAlarm: (alarm: Alarm) => void;
   deleteAlarm: (alarmId: string) => void;
   getAllAlarms: () => void;
+  dismissAlarm: () => void;
   onAlarmsUpdated: (callback: (alarms: Alarm[]) => void) => void;
   onAlarmTriggered: (callback: (alarmId: string) => void) => void;
   removeAlarmsUpdatedListener: () => void;
@@ -27,6 +28,7 @@ let audioContext: AudioContext | null = null;
 let audioInterval: NodeJS.Timeout | null = null;
 let isAlarmPlaying: boolean = false;
 let alarmNotification: Notification | null = null;
+let timeUpdateInterval: NodeJS.Timeout | null = null;
 
 function generateAlarmId(): string {
   return `alarm-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
@@ -34,6 +36,37 @@ function generateAlarmId(): string {
 
 function formatTime(hour: number, minute: number, second: number): string {
   return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:${String(second).padStart(2, '0')}`;
+}
+
+function getTimeUntilAlarm(alarm: Alarm): number {
+  const now = new Date();
+  const alarmTime = new Date();
+  alarmTime.setHours(alarm.hour, alarm.minute, alarm.second, 0);
+  
+  // Если время будильника уже прошло сегодня, берем завтрашний день
+  if (alarmTime <= now) {
+    alarmTime.setDate(alarmTime.getDate() + 1);
+  }
+  
+  return Math.floor((alarmTime.getTime() - now.getTime()) / 1000);
+}
+
+function formatTimeUntil(seconds: number): string {
+  if (seconds <= 0) return 'Сейчас';
+  if (seconds < 60) return `через ${seconds}с`;
+  
+  const mins = Math.floor(seconds / 60);
+  if (mins < 60) {
+    return `через ${mins}м`;
+  }
+  
+  const hours = Math.floor(seconds / 3600);
+  const remainingMins = Math.floor((seconds % 3600) / 60);
+  
+  if (remainingMins === 0) {
+    return `через ${hours}ч`;
+  }
+  return `через ${hours}ч ${remainingMins}м`;
 }
 
 function renderAlarms(): void {
@@ -73,10 +106,16 @@ function renderAlarms(): void {
         </div>
       `;
     } else {
+      const timeUntil = alarm.enabled ? getTimeUntilAlarm(alarm) : 0;
+      const timeUntilStr = alarm.enabled ? formatTimeUntil(timeUntil) : '';
+      
       return `
         <div class="alarm-item" data-id="${alarm.id}">
           <div class="alarm-info">
-            <span class="alarm-time">${timeStr}</span>
+            <div class="alarm-time-group">
+              <span class="alarm-time">${timeStr}</span>
+              ${alarm.enabled && timeUntilStr ? `<span class="alarm-time-until">${timeUntilStr}</span>` : ''}
+            </div>
             <div class="alarm-toggles">
               <div class="toggle-group">
                 <label class="alarm-toggle with-label" title="Включить/выключить будильник">
@@ -337,22 +376,22 @@ function showAlarmNotification(alarm: Alarm): void {
       tag: 'alarm-alert'
     });
 
-    // Останавливаем звук когда уведомление закрыто
+    // Останавливаем звук и мигание когда уведомление закрыто
     alarmNotification.onclose = () => {
-      stopAlarmSound();
+      dismissAlarm();
     };
 
-    // Останавливаем звук при клике на уведомление
+    // Останавливаем звук и мигание при клике на уведомление
     alarmNotification.onclick = () => {
-      stopAlarmSound();
+      dismissAlarm();
       if (window.focus) window.focus();
     };
   } else {
     // Если уведомления не разрешены, показываем alert
     const timeStr = formatTime(alarm.hour, alarm.minute, alarm.second);
     alert(`⏰ Будильник! Время: ${timeStr}`);
-    // Останавливаем звук после закрытия alert
-    stopAlarmSound();
+    // Останавливаем звук и мигание после закрытия alert
+    dismissAlarm();
   }
 }
 
@@ -382,6 +421,14 @@ document.addEventListener('DOMContentLoaded', () => {
       alarms = updatedAlarms;
       renderAlarms();
     });
+
+    // Запускаем обновление времени до срабатывания будильников каждую секунду
+    if (timeUpdateInterval) {
+      clearInterval(timeUpdateInterval);
+    }
+    timeUpdateInterval = setInterval(() => {
+      renderAlarms();
+    }, 1000);
 
     // Слушаем срабатывание будильника
     electronAPI.onAlarmTriggered((alarmId) => {

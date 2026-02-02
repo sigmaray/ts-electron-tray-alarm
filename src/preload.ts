@@ -32,6 +32,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getAllAlarms: () => {
     ipcRenderer.send('alarm-get-all');
   },
+  dismissAlarm: () => {
+    ipcRenderer.send('alarm-dismiss');
+  },
   // Слушатели событий от main процесса
   onAlarmsUpdated: (callback: (alarms: Alarm[]) => void) => {
     ipcRenderer.on('alarms-updated', (_event, alarms) => callback(alarms));

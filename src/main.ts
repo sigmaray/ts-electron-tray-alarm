@@ -33,6 +33,9 @@ let alarms: Alarm[] = [];
 let alarmCheckInterval: NodeJS.Timeout | null = null;
 let lastTriggeredDate: string = ''; // Для отслеживания сработавших будильников сегодня
 let triggeredAlarmsToday: Set<string> = new Set(); // ID будильников, сработавших сегодня
+let blinkInterval: NodeJS.Timeout | null = null;
+let isBlinking = false;
+let isAlarmActive = false; // Флаг активного будильника (играет звук)
 
 function updateTrayMenu(): void {
   if (!tray) return;
@@ -76,14 +79,22 @@ function updateTrayMenu(): void {
   tray.setContextMenu(contextMenu);
 }
 
-function createTextIcon(text: string): Electron.NativeImage {
+function createTextIcon(text: string, isBlinking: boolean = false): Electron.NativeImage {
   const size = 22; // Стандартный размер для трея
   const canvas = createCanvas(size, size);
   const ctx = canvas.getContext('2d');
   
-  // Приглушенный синий фон (соответствует цвету фона окна)
-  const bgColor = '#5b7fa6';
+  // Определяем цвет в зависимости от состояния
+  let bgColor: string;
   const textColor = '#FFFFFF';
+  
+  if (isBlinking) {
+    // Мигание: красный
+    bgColor = '#FF0000';
+  } else {
+    // Приглушенный синий фон (соответствует цвету фона окна)
+    bgColor = '#5b7fa6';
+  }
   
   // Рисуем фон
   ctx.fillStyle = bgColor;
@@ -174,21 +185,51 @@ function formatTimeForTray(seconds: number): string {
 function updateTrayIcon(): void {
   if (!tray) return;
   
-  const nearestAlarm = getNearestAlarm();
+  let icon: Electron.NativeImage;
+  let tooltipText: string;
   
-  if (nearestAlarm) {
-    const timeUntil = getTimeUntilAlarm(nearestAlarm);
-    const text = formatTimeForTray(timeUntil);
-    const icon = createTextIcon(text);
-    tray.setImage(icon);
-    
-    const alarmTime = `${String(nearestAlarm.hour).padStart(2, '0')}:${String(nearestAlarm.minute).padStart(2, '0')}:${String(nearestAlarm.second).padStart(2, '0')}`;
-    tray.setToolTip(`Будильник: ${alarmTime} (через ${formatTimeForTray(timeUntil)})`);
+  if (isAlarmActive) {
+    // Мигание: красная иконка с восклицательным знаком
+    icon = createTextIcon('!', isBlinking);
+    tooltipText = '⏰ Будильник!';
   } else {
-    const icon = createTextIcon('—');
-    tray.setImage(icon);
-    tray.setToolTip('Будильник не установлен');
+    const nearestAlarm = getNearestAlarm();
+    
+    if (nearestAlarm) {
+      const timeUntil = getTimeUntilAlarm(nearestAlarm);
+      const text = formatTimeForTray(timeUntil);
+      icon = createTextIcon(text, false);
+      
+      const alarmTime = `${String(nearestAlarm.hour).padStart(2, '0')}:${String(nearestAlarm.minute).padStart(2, '0')}:${String(nearestAlarm.second).padStart(2, '0')}`;
+      tooltipText = `Будильник: ${alarmTime} (через ${formatTimeForTray(timeUntil)})`;
+    } else {
+      icon = createTextIcon('—', false);
+      tooltipText = 'Будильник не установлен';
+    }
   }
+  
+  tray.setImage(icon);
+  tray.setToolTip(tooltipText);
+}
+
+function startBlinking(): void {
+  if (blinkInterval) return;
+  
+  isBlinking = false;
+  blinkInterval = setInterval(() => {
+    isBlinking = !isBlinking;
+    updateTrayIcon();
+  }, 500); // Мигание каждые 500мс
+}
+
+function stopBlinking(): void {
+  if (blinkInterval) {
+    clearInterval(blinkInterval);
+    blinkInterval = null;
+  }
+  isBlinking = false;
+  isAlarmActive = false;
+  updateTrayIcon();
 }
 
 function checkAlarms(): void {
@@ -232,6 +273,10 @@ function checkAlarms(): void {
 }
 
 function triggerAlarm(alarm: Alarm): void {
+  // Запускаем мигание иконки
+  isAlarmActive = true;
+  startBlinking();
+  
   // Показываем уведомление
   if (Notification.isSupported()) {
     const notification = new Notification({
@@ -403,7 +448,7 @@ function createWindow(): void {
 
 function createTray(): void {
   // Начальная иконка с прочерком
-  tray = new Tray(createTextIcon('—'));
+  tray = new Tray(createTextIcon('—', false));
 
   updateTrayMenu();
   updateTrayIcon();
@@ -484,6 +529,11 @@ app.whenReady().then(() => {
   ipcMain.on('close-app', () => {
     app.isQuitting = true;
     app.quit();
+  });
+
+  // Обработчик остановки мигания будильника (когда пользователь отключает звук)
+  ipcMain.on('alarm-dismiss', () => {
+    stopBlinking();
   });
 
   app.on('activate', () => {
