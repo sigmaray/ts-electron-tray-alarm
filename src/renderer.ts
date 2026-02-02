@@ -113,6 +113,30 @@ function updateTimeUntilForAlarms(): void {
   });
 }
 
+function setupTimeInputHandlers(input: HTMLInputElement): void {
+  // Проверяем, не добавлены ли уже обработчики (используя data-атрибут)
+  if ((input as any).__timeHandlersSetup) {
+    return; // Обработчики уже добавлены
+  }
+  
+  // При фокусе очищаем поле, если значение "0" или "00"
+  input.addEventListener('focus', function focusHandler() {
+    if (this.value === '0' || this.value === '00') {
+      this.value = '';
+    }
+  });
+  
+  // При потере фокуса, если поле пустое, устанавливаем "0"
+  input.addEventListener('blur', function blurHandler() {
+    if (this.value === '' || this.value.trim() === '') {
+      this.value = '0';
+    }
+  });
+  
+  // Помечаем, что обработчики добавлены
+  (input as any).__timeHandlersSetup = true;
+}
+
 function renderAlarms(): void {
   const container = document.getElementById('alarmsList');
   if (!container) return;
@@ -238,6 +262,8 @@ function renderAlarms(): void {
       }
       
       if (inputToFocus) {
+        // Настраиваем обработчики для полей редактирования
+        setupTimeInputHandlers(inputToFocus);
         inputToFocus.focus();
         // Восстанавливаем позицию курсора
         const cursorPos = (editingValues as any).cursorPosition;
@@ -245,6 +271,15 @@ function renderAlarms(): void {
           inputToFocus.setSelectionRange(cursorPos, cursorPos);
         }
       }
+      
+      // Настраиваем обработчики для всех полей редактирования
+      const hourInput = document.getElementById(`edit-hour-${editingAlarmId}`) as HTMLInputElement;
+      const minuteInput = document.getElementById(`edit-minute-${editingAlarmId}`) as HTMLInputElement;
+      const secondInput = document.getElementById(`edit-second-${editingAlarmId}`) as HTMLInputElement;
+      
+      if (hourInput) setupTimeInputHandlers(hourInput);
+      if (minuteInput) setupTimeInputHandlers(minuteInput);
+      if (secondInput) setupTimeInputHandlers(secondInput);
     }, 0);
   }
 }
@@ -310,6 +345,17 @@ function addAlarm(): void {
 function editAlarm(alarmId: string): void {
   editingAlarmId = alarmId;
   renderAlarms();
+  
+  // Настраиваем обработчики для полей редактирования после перерисовки
+  setTimeout(() => {
+    const hourInput = document.getElementById(`edit-hour-${alarmId}`) as HTMLInputElement;
+    const minuteInput = document.getElementById(`edit-minute-${alarmId}`) as HTMLInputElement;
+    const secondInput = document.getElementById(`edit-second-${alarmId}`) as HTMLInputElement;
+    
+    if (hourInput) setupTimeInputHandlers(hourInput);
+    if (minuteInput) setupTimeInputHandlers(minuteInput);
+    if (secondInput) setupTimeInputHandlers(secondInput);
+  }, 0);
 }
 
 function cancelEdit(alarmId: string): void {
@@ -324,9 +370,10 @@ function saveAlarm(alarmId: string): void {
 
   if (!hourInput || !minuteInput || !secondInput) return;
 
-  const hour = parseInt(hourInput.value, 10);
-  const minute = parseInt(minuteInput.value, 10);
-  const second = parseInt(secondInput.value, 10);
+  // Если поле пустое, используем 0
+  const hour = hourInput.value === '' ? 0 : parseInt(hourInput.value, 10);
+  const minute = minuteInput.value === '' ? 0 : parseInt(minuteInput.value, 10);
+  const second = secondInput.value === '' ? 0 : parseInt(secondInput.value, 10);
 
   if (isNaN(hour) || hour < 0 || hour > 23) {
     alert('Введите корректный час (0-23)');
@@ -580,6 +627,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const addBtn = document.getElementById('addAlarmBtn');
 
   if (hourInput) {
+    setupTimeInputHandlers(hourInput);
     hourInput.addEventListener('keypress', (e: KeyboardEvent) => {
       if (e.key === 'Enter') {
         minuteInput?.focus();
@@ -588,6 +636,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   if (minuteInput) {
+    setupTimeInputHandlers(minuteInput);
     minuteInput.addEventListener('keypress', (e: KeyboardEvent) => {
       if (e.key === 'Enter') {
         secondInput?.focus();
@@ -596,6 +645,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   if (secondInput) {
+    setupTimeInputHandlers(secondInput);
     secondInput.addEventListener('keypress', (e: KeyboardEvent) => {
       if (e.key === 'Enter' && addBtn) {
         addAlarm();
