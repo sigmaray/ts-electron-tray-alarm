@@ -69,9 +69,87 @@ function formatTimeUntil(seconds: number): string {
   return `через ${hours}ч ${remainingMins}м`;
 }
 
+function hasAlarmAtTime(hour: number, minute: number, second: number, excludeAlarmId?: string): boolean {
+  return alarms.some(alarm => {
+    // Пропускаем будильник, который редактируется
+    if (excludeAlarmId && alarm.id === excludeAlarmId) {
+      return false;
+    }
+    return alarm.hour === hour && alarm.minute === minute && alarm.second === second;
+  });
+}
+
+function updateTimeUntilForAlarms(): void {
+  // Обновляем только время до срабатывания для будильников, не находящихся в режиме редактирования
+  alarms.forEach(alarm => {
+    if (alarm.id === editingAlarmId) return; // Пропускаем редактируемый будильник
+    
+    const alarmItem = document.querySelector(`.alarm-item[data-id="${alarm.id}"]`);
+    if (!alarmItem) return;
+    
+    const timeUntilElement = alarmItem.querySelector('.alarm-time-until');
+    if (alarm.enabled) {
+      const timeUntil = getTimeUntilAlarm(alarm);
+      const timeUntilStr = formatTimeUntil(timeUntil);
+      
+      if (timeUntilElement) {
+        timeUntilElement.textContent = timeUntilStr;
+      } else {
+        // Если элемента нет, но будильник включен, добавляем его
+        const timeGroup = alarmItem.querySelector('.alarm-time-group');
+        if (timeGroup) {
+          const timeUntilSpan = document.createElement('span');
+          timeUntilSpan.className = 'alarm-time-until';
+          timeUntilSpan.textContent = timeUntilStr;
+          timeGroup.appendChild(timeUntilSpan);
+        }
+      }
+    } else {
+      // Если будильник выключен, удаляем элемент времени до срабатывания
+      if (timeUntilElement) {
+        timeUntilElement.remove();
+      }
+    }
+  });
+}
+
 function renderAlarms(): void {
   const container = document.getElementById('alarmsList');
   if (!container) return;
+
+  // Сохраняем значения полей редактирования и информацию о фокусе перед перерисовкой
+  let editingValues: { hour: string; minute: string; second: string; focusedField: string | null } | null = null;
+  if (editingAlarmId) {
+    const hourInput = document.getElementById(`edit-hour-${editingAlarmId}`) as HTMLInputElement;
+    const minuteInput = document.getElementById(`edit-minute-${editingAlarmId}`) as HTMLInputElement;
+    const secondInput = document.getElementById(`edit-second-${editingAlarmId}`) as HTMLInputElement;
+    
+    if (hourInput && minuteInput && secondInput) {
+      // Определяем, какое поле имеет фокус
+      let focusedField: string | null = null;
+      if (document.activeElement === hourInput) {
+        focusedField = 'hour';
+      } else if (document.activeElement === minuteInput) {
+        focusedField = 'minute';
+      } else if (document.activeElement === secondInput) {
+        focusedField = 'second';
+      }
+      
+      // Сохраняем позицию курсора
+      const activeElement = document.activeElement as HTMLInputElement;
+      const cursorPosition = activeElement && (activeElement === hourInput || activeElement === minuteInput || activeElement === secondInput) 
+        ? activeElement.selectionStart 
+        : null;
+      
+      editingValues = {
+        hour: hourInput.value,
+        minute: minuteInput.value,
+        second: secondInput.value,
+        focusedField: focusedField,
+        cursorPosition: cursorPosition
+      } as any;
+    }
+  }
 
   if (alarms.length === 0) {
     container.innerHTML = '<div class="no-alarms">Нет установленных будильников</div>';
@@ -90,14 +168,19 @@ function renderAlarms(): void {
     const timeStr = formatTime(alarm.hour, alarm.minute, alarm.second);
     
     if (isEditing) {
+      // Используем сохраненные значения, если они есть, иначе значения из будильника
+      const hourValue = editingValues ? editingValues.hour : alarm.hour;
+      const minuteValue = editingValues ? editingValues.minute : alarm.minute;
+      const secondValue = editingValues ? editingValues.second : alarm.second;
+      
       return `
         <div class="alarm-item editing" data-id="${alarm.id}">
           <div class="alarm-time-input">
-            <input type="number" min="0" max="23" value="${alarm.hour}" class="hour-input" id="edit-hour-${alarm.id}">
+            <input type="number" min="0" max="23" value="${hourValue}" class="hour-input" id="edit-hour-${alarm.id}">
             <span>:</span>
-            <input type="number" min="0" max="59" value="${alarm.minute}" class="minute-input" id="edit-minute-${alarm.id}">
+            <input type="number" min="0" max="59" value="${minuteValue}" class="minute-input" id="edit-minute-${alarm.id}">
             <span>:</span>
-            <input type="number" min="0" max="59" value="${alarm.second}" class="second-input" id="edit-second-${alarm.id}">
+            <input type="number" min="0" max="59" value="${secondValue}" class="second-input" id="edit-second-${alarm.id}">
           </div>
           <div class="alarm-actions">
             <button class="btn-save" onclick="saveAlarm('${alarm.id}')">Сохранить</button>
@@ -141,6 +224,29 @@ function renderAlarms(): void {
       `;
     }
   }).join('');
+
+  // Восстанавливаем фокус и позицию курсора после перерисовки
+  if (editingAlarmId && editingValues && editingValues.focusedField) {
+    setTimeout(() => {
+      let inputToFocus: HTMLInputElement | null = null;
+      if (editingValues!.focusedField === 'hour') {
+        inputToFocus = document.getElementById(`edit-hour-${editingAlarmId}`) as HTMLInputElement;
+      } else if (editingValues!.focusedField === 'minute') {
+        inputToFocus = document.getElementById(`edit-minute-${editingAlarmId}`) as HTMLInputElement;
+      } else if (editingValues!.focusedField === 'second') {
+        inputToFocus = document.getElementById(`edit-second-${editingAlarmId}`) as HTMLInputElement;
+      }
+      
+      if (inputToFocus) {
+        inputToFocus.focus();
+        // Восстанавливаем позицию курсора
+        const cursorPos = (editingValues as any).cursorPosition;
+        if (cursorPos !== null && cursorPos !== undefined) {
+          inputToFocus.setSelectionRange(cursorPos, cursorPos);
+        }
+      }
+    }, 0);
+  }
 }
 
 function addAlarm(): void {
@@ -166,6 +272,12 @@ function addAlarm(): void {
 
   if (isNaN(second) || second < 0 || second > 59) {
     alert('Введите корректные секунды (0-59)');
+    return;
+  }
+
+  // Проверяем, нет ли уже будильника с таким же временем
+  if (hasAlarmAtTime(hour, minute, second)) {
+    alert('Будильник на это время уже существует!');
     return;
   }
 
@@ -233,6 +345,12 @@ function saveAlarm(alarmId: string): void {
 
   const alarm = alarms.find(a => a.id === alarmId);
   if (!alarm) return;
+
+  // Проверяем, нет ли уже другого будильника с таким же временем
+  if (hasAlarmAtTime(hour, minute, second, alarmId)) {
+    alert('Будильник на это время уже существует!');
+    return;
+  }
 
   // При редактировании сохраняем текущее значение recurring (не меняем его)
   const updatedAlarm: Alarm = {
@@ -360,6 +478,12 @@ function updateDismissButton(): void {
 
 function dismissAlarm(): void {
   stopAlarmSound();
+  
+  // Останавливаем мигание иконки в трее
+  const electronAPI = (window as any).electronAPI as ElectronAPI | undefined;
+  if (electronAPI) {
+    electronAPI.dismissAlarm();
+  }
 }
 
 function showAlarmNotification(alarm: Alarm): void {
@@ -427,7 +551,13 @@ document.addEventListener('DOMContentLoaded', () => {
       clearInterval(timeUpdateInterval);
     }
     timeUpdateInterval = setInterval(() => {
-      renderAlarms();
+      // Если есть будильник в режиме редактирования, обновляем только время до срабатывания
+      // без полной перерисовки, чтобы не сбрасывать фокус
+      if (editingAlarmId) {
+        updateTimeUntilForAlarms();
+      } else {
+        renderAlarms();
+      }
     }, 1000);
 
     // Слушаем срабатывание будильника
