@@ -240,25 +240,27 @@ test.describe('Alarm Application', () => {
     
     // Находим переключатель для этого будильника
     const alarmItem = window.locator('.alarm-item:has-text("13:00:00")');
-    const toggle = alarmItem.locator('input[type="checkbox"]');
+    // Выбираем первый чекбокс (включение/выключение), а не второй (повторяющийся)
+    const toggle = alarmItem.locator('input[type="checkbox"]').first();
     
     // Проверяем, что будильник включен по умолчанию
     await expect(toggle).toBeChecked();
     
     // Выключаем будильник через клик по label (более надежно)
-    const toggleLabel = alarmItem.locator('label.alarm-toggle');
+    // Выбираем первый label (для включения/выключения)
+    const toggleLabel = alarmItem.locator('label.alarm-toggle').first();
     await toggleLabel.click();
     await window.waitForTimeout(1000);
     
     // Проверяем, что переключатель обновился
     // Обновляем селектор, так как DOM мог измениться
-    const toggleAfter = alarmItem.locator('input[type="checkbox"]');
+    const toggleAfter = alarmItem.locator('input[type="checkbox"]').first();
     await expect(toggleAfter).not.toBeChecked();
     
     // Включаем обратно
     await toggleLabel.click();
     await window.waitForTimeout(1000);
-    const toggleAfter2 = alarmItem.locator('input[type="checkbox"]');
+    const toggleAfter2 = alarmItem.locator('input[type="checkbox"]').first();
     await expect(toggleAfter2).toBeChecked();
   });
 
