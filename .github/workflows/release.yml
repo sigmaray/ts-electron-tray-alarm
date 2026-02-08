@@ -1,0 +1,117 @@
+name: Build and Release
+
+on:
+  push:
+    branches: [ main ]
+
+permissions:
+  contents: write
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      datetime: ${{ steps.datetime.outputs.datetime }}
+      version: ${{ steps.version.outputs.version }}
+    steps:
+    - name: Get current date and time
+      id: datetime
+      run: echo "datetime=$(date -u +'%Y%m%d-%H%M%S')" >> $GITHUB_OUTPUT
+    - name: Generate semver version
+      id: version
+      run: |
+        datetime=$(date -u +'%Y%m%d-%H%M%S')
+        year=$(echo $datetime | cut -c1-4)
+        month=$(echo $datetime | cut -c5-6)
+        day=$(echo $datetime | cut -c7-8)
+        time=$(echo $datetime | cut -c10-)
+        version="$year.$month.$day-$time"
+        echo "version=$version" >> $GITHUB_OUTPUT
+
+  build:
+    needs: prepare
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+
+    - name: Install system dependencies (Linux)
+      if: matrix.os == 'ubuntu-latest'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libcairo2-dev libpango1.0-dev libjpeg-dev libgif-dev librsvg2-dev
+
+    - name: Install dependencies
+      run: npm ci
+
+    - name: Update version in package.json
+      shell: bash
+      run: |
+        version="${{ needs.prepare.outputs.version }}"
+        if [ "$RUNNER_OS" == "Windows" ]; then
+          powershell -Command "(Get-Content package.json) -replace '\"version\": \".*\"', '\"version\": \"$version\"' | Set-Content package.json"
+        elif [ "$RUNNER_OS" == "macOS" ]; then
+          sed -i '' "s/\"version\": \".*\"/\"version\": \"$version\"/" package.json
+        else
+          sed -i "s/\"version\": \".*\"/\"version\": \"$version\"/" package.json
+        fi
+
+    - name: Build TypeScript
+      run: npm run build
+
+    - name: Build application
+      run: npm run build:electron
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        CSC_IDENTITY_AUTO_DISCOVERY: false
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: release-${{ matrix.os }}
+        path: release/*.zip
+        retention-days: 30
+
+  create-release:
+    needs: [prepare, build]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    
+    steps:
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: artifacts
+
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: release-${{ needs.prepare.outputs.datetime }}
+        name: Release ${{ needs.prepare.outputs.datetime }}
+        body: |
+          Автоматический релиз от ${{ needs.prepare.outputs.datetime }}
+          
+          Коммит: ${{ github.sha }}
+          
+          Собранные платформы:
+          - Windows
+          - Linux
+          - macOS
+        files: |
+          artifacts/release-ubuntu-latest/*.zip
+          artifacts/release-windows-latest/*.zip
+          artifacts/release-macos-latest/*.zip
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
