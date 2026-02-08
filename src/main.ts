@@ -15,6 +15,9 @@ declare global {
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 
+// Константа для управления разрешением только одного экземпляра приложения
+const ALLOW_ONLY_ONE_INSTANCE = process.env.ALLOW_ONLY_ONE_INSTANCE !== 'false';
+
 // Экспортируем tray для тестирования (только в development режиме)
 if (process.env.NODE_ENV === 'test' || process.env.ELECTRON_DISABLE_SANDBOX) {
   (global as any).__tray__ = () => tray;
@@ -557,30 +560,14 @@ function createTray(): void {
   });
 }
 
-// Обеспечиваем, что только один экземпляр приложения может быть запущен
-const gotTheLock = app.requestSingleInstanceLock();
-
-if (!gotTheLock) {
-  // Если другой экземпляр уже запущен, закрываем этот
-  app.quit();
-} else {
-  // Обрабатываем попытку запуска второго экземпляра
-  app.on('second-instance', () => {
-    // Если пользователь пытается запустить второй экземпляр, показываем существующее окно
-    if (mainWindow) {
-      if (mainWindow.isMinimized()) mainWindow.restore();
-      mainWindow.show();
-      mainWindow.focus();
-    }
-  });
-
-  app.whenReady().then(() => {
-    // Загружаем будильники из файла при запуске
-    alarms = loadAlarms();
-    
-    createWindow();
-    createTray();
-    startAlarmChecker();
+// Функция инициализации приложения
+function initializeApp(): void {
+  // Загружаем будильники из файла при запуске
+  alarms = loadAlarms();
+  
+  createWindow();
+  createTray();
+  startAlarmChecker();
 
   // Обработчики для управления будильниками
   ipcMain.on('alarm-add', (_event, alarm: Alarm) => {
@@ -651,6 +638,34 @@ if (!gotTheLock) {
       mainWindow?.focus();
     }
   });
+}
+
+// Обеспечиваем, что только один экземпляр приложения может быть запущен (если включено)
+if (ALLOW_ONLY_ONE_INSTANCE) {
+  const gotTheLock = app.requestSingleInstanceLock();
+
+  if (!gotTheLock) {
+    // Если другой экземпляр уже запущен, закрываем этот
+    app.quit();
+  } else {
+    // Обрабатываем попытку запуска второго экземпляра
+    app.on('second-instance', () => {
+      // Если пользователь пытается запустить второй экземпляр, показываем существующее окно
+      if (mainWindow) {
+        if (mainWindow.isMinimized()) mainWindow.restore();
+        mainWindow.show();
+        mainWindow.focus();
+      }
+    });
+
+    app.whenReady().then(() => {
+      initializeApp();
+    });
+  }
+} else {
+  // Если разрешено несколько экземпляров, запускаем приложение без проверки блокировки
+  app.whenReady().then(() => {
+    initializeApp();
   });
 }
 
