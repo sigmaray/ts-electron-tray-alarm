@@ -557,13 +557,30 @@ function createTray(): void {
   });
 }
 
-app.whenReady().then(() => {
-  // Загружаем будильники из файла при запуске
-  alarms = loadAlarms();
-  
-  createWindow();
-  createTray();
-  startAlarmChecker();
+// Обеспечиваем, что только один экземпляр приложения может быть запущен
+const gotTheLock = app.requestSingleInstanceLock();
+
+if (!gotTheLock) {
+  // Если другой экземпляр уже запущен, закрываем этот
+  app.quit();
+} else {
+  // Обрабатываем попытку запуска второго экземпляра
+  app.on('second-instance', () => {
+    // Если пользователь пытается запустить второй экземпляр, показываем существующее окно
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.show();
+      mainWindow.focus();
+    }
+  });
+
+  app.whenReady().then(() => {
+    // Загружаем будильники из файла при запуске
+    alarms = loadAlarms();
+    
+    createWindow();
+    createTray();
+    startAlarmChecker();
 
   // Обработчики для управления будильниками
   ipcMain.on('alarm-add', (_event, alarm: Alarm) => {
@@ -634,7 +651,8 @@ app.whenReady().then(() => {
       mainWindow?.focus();
     }
   });
-});
+  });
+}
 
 function sendAlarmsToRenderer(): void {
   if (mainWindow && !mainWindow.isDestroyed()) {
