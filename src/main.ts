@@ -284,6 +284,25 @@ function triggerAlarm(alarm: Alarm): void {
       body: `Время: ${String(alarm.hour).padStart(2, '0')}:${String(alarm.minute).padStart(2, '0')}:${String(alarm.second).padStart(2, '0')}`,
       urgency: 'critical',
     });
+    
+    // Останавливаем звук и мигание при закрытии уведомления
+    notification.on('close', () => {
+      stopBlinking();
+      // Отправляем сообщение в renderer для остановки звука
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('alarm-dismiss-from-main');
+      }
+    });
+    
+    // Останавливаем звук и мигание при клике на уведомление
+    notification.on('click', () => {
+      stopBlinking();
+      // Отправляем сообщение в renderer для остановки звука
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('alarm-dismiss-from-main');
+      }
+    });
+    
     notification.show();
   }
   

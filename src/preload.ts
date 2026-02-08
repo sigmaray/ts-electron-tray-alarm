@@ -42,6 +42,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onAlarmTriggered: (callback: (alarmId: string) => void) => {
     ipcRenderer.on('alarm-triggered', (_event, alarmId) => callback(alarmId));
   },
+  // Обработчик для сообщения от main процесса о закрытии нативного уведомления
+  onAlarmDismissFromMain: (callback: () => void) => {
+    ipcRenderer.on('alarm-dismiss-from-main', () => callback());
+  },
   // Удаление слушателей
   removeAlarmsUpdatedListener: () => {
     ipcRenderer.removeAllListeners('alarms-updated');

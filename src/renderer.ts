@@ -18,6 +18,7 @@ interface ElectronAPI {
   dismissAlarm: () => void;
   onAlarmsUpdated: (callback: (alarms: Alarm[]) => void) => void;
   onAlarmTriggered: (callback: (alarmId: string) => void) => void;
+  onAlarmDismissFromMain: (callback: () => void) => void;
   removeAlarmsUpdatedListener: () => void;
   removeAlarmTriggeredListener: () => void;
 }
@@ -28,6 +29,7 @@ let audioContext: AudioContext | null = null;
 let audioInterval: NodeJS.Timeout | null = null;
 let isAlarmPlaying: boolean = false;
 let alarmNotification: Notification | null = null;
+let notificationCheckInterval: NodeJS.Timeout | null = null;
 let timeUpdateInterval: NodeJS.Timeout | null = null;
 
 function generateAlarmId(): string {
@@ -486,8 +488,15 @@ function playAlarmSound(): void {
     isAlarmPlaying = true;
     playBeep();
     audioInterval = setInterval(() => {
-      if (audioContext && isAlarmPlaying && alarmNotification) {
-        playBeep();
+      // Проверяем, что звук должен играть и уведомление существует
+      if (audioContext && isAlarmPlaying) {
+        // Проверяем, что уведомление все еще активно (не закрыто)
+        if (alarmNotification) {
+          playBeep();
+        } else {
+          // Уведомление было закрыто, останавливаем звук
+          stopAlarmSound();
+        }
       } else {
         stopAlarmSound();
       }
@@ -502,6 +511,10 @@ function stopAlarmSound(): void {
   if (audioInterval) {
     clearInterval(audioInterval);
     audioInterval = null;
+  }
+  if (notificationCheckInterval) {
+    clearInterval(notificationCheckInterval);
+    notificationCheckInterval = null;
   }
   if (audioContext) {
     audioContext.close().catch(() => {
@@ -547,16 +560,52 @@ function showAlarmNotification(alarm: Alarm): void {
       tag: 'alarm-alert'
     });
 
-    // Останавливаем звук и мигание когда уведомление закрыто
-    alarmNotification.onclose = () => {
-      dismissAlarm();
+    // Функция для обработки закрытия уведомления
+    const handleNotificationClose = () => {
+      console.log('Браузерное уведомление закрыто, останавливаем звук');
+      // Убеждаемся, что звук останавливается
+      if (isAlarmPlaying) {
+        dismissAlarm();
+      }
     };
 
-    // Останавливаем звук и мигание при клике на уведомление
-    alarmNotification.onclick = () => {
-      dismissAlarm();
+    // Функция для обработки клика по уведомлению
+    const handleNotificationClick = () => {
+      console.log('Клик по браузерному уведомлению, останавливаем звук');
+      if (isAlarmPlaying) {
+        dismissAlarm();
+      }
       if (window.focus) window.focus();
     };
+
+    // Останавливаем звук и мигание когда уведомление закрыто
+    // Используем и addEventListener, и свойства для максимальной совместимости
+    try {
+      alarmNotification.addEventListener('close', handleNotificationClose);
+    } catch (e) {
+      console.warn('Не удалось добавить addEventListener для close:', e);
+    }
+    
+    // Также используем свойство onclose (может работать в некоторых версиях Electron)
+    alarmNotification.onclose = handleNotificationClose;
+
+    // Останавливаем звук и мигание при клике на уведомление
+    try {
+      alarmNotification.addEventListener('click', handleNotificationClick);
+    } catch (e) {
+      console.warn('Не удалось добавить addEventListener для click:', e);
+    }
+    
+    alarmNotification.onclick = handleNotificationClick;
+    
+    // Дополнительная защита: используем событие error, если уведомление не может быть показано
+    try {
+      alarmNotification.addEventListener('error', (e) => {
+        console.error('Ошибка браузерного уведомления:', e);
+      });
+    } catch (e) {
+      // Игнорируем ошибки при добавлении обработчика error
+    }
   } else {
     // Если уведомления не разрешены, показываем alert
     const timeStr = formatTime(alarm.hour, alarm.minute, alarm.second);
@@ -617,6 +666,34 @@ document.addEventListener('DOMContentLoaded', () => {
         // Показываем уведомление
         showAlarmNotification(alarm);
       }
+    });
+
+    // Слушаем сообщение от main процесса о закрытии нативного уведомления
+    electronAPI.onAlarmDismissFromMain(() => {
+      console.log('Получено сообщение от main процесса о закрытии нативного уведомления');
+      // Останавливаем звук
+      isAlarmPlaying = false;
+      if (audioInterval) {
+        clearInterval(audioInterval);
+        audioInterval = null;
+      }
+      if (audioContext) {
+        audioContext.close().catch(() => {});
+        audioContext = null;
+      }
+      // Закрываем браузерное уведомление, если оно активно
+      if (alarmNotification) {
+        try {
+          alarmNotification.close();
+        } catch (e) {
+          console.error('Ошибка при закрытии браузерного уведомления:', e);
+        }
+        alarmNotification = null;
+      }
+      // Обновляем кнопку
+      updateDismissButton();
+      // Отправляем подтверждение обратно в main процесс (хотя это уже сделано через dismissAlarm)
+      // Но мы уже вызвали stopBlinking в main, так что просто обновляем состояние
     });
   }
 
