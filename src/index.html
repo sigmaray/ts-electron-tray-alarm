@@ -318,6 +318,34 @@
         .dismiss-btn:hover {
             background: rgba(244, 67, 54, 1) !important;
         }
+        .quick-time-links {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        .quick-time-link {
+            padding: 6px 12px;
+            font-size: 0.9em;
+            font-weight: 500;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            border-radius: 6px;
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            text-decoration: none;
+            display: inline-block;
+        }
+        .quick-time-link:hover {
+            background: rgba(255, 255, 255, 0.25);
+            border-color: rgba(255, 255, 255, 0.5);
+            transform: translateY(-1px);
+        }
+        .quick-time-link:active {
+            transform: translateY(0);
+        }
     </style>
 </head>
 <body>
@@ -332,6 +360,13 @@
                 <input type="number" id="newMinute" class="time-input" min="0" max="59" value="00" placeholder="00">
                 <span class="time-separator">:</span>
                 <input type="number" id="newSecond" class="time-input" min="0" max="59" value="00" placeholder="00">
+            </div>
+            <div class="quick-time-links">
+                <a href="#" class="quick-time-link" onclick="setQuickTime(2); return false;">через 2 минуты</a>
+                <a href="#" class="quick-time-link" onclick="setQuickTime(5); return false;">через 5 минут</a>
+                <a href="#" class="quick-time-link" onclick="setQuickTime(30); return false;">через 30 минут</a>
+                <a href="#" class="quick-time-link" onclick="setQuickTime(60); return false;">через 1 час</a>
+                <a href="#" class="quick-time-link" onclick="setQuickTime(120); return false;">через 2 часа</a>
             </div>
             <div class="recurring-toggle-group">
                 <div class="toggle-group">
