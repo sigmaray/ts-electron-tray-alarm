@@ -220,6 +220,27 @@ function formatTimeForTray(seconds: number): string {
   return `${roundedHours}h`;
 }
 
+function formatTimeForTooltip(seconds: number): string {
+  if (seconds <= 0) return '0с';
+  
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const secs = Math.floor(seconds % 60);
+  
+  const parts: string[] = [];
+  if (hours > 0) {
+    parts.push(`${hours}ч`);
+  }
+  if (minutes > 0) {
+    parts.push(`${minutes}м`);
+  }
+  if (secs > 0 || parts.length === 0) {
+    parts.push(`${secs}с`);
+  }
+  
+  return parts.join(' ');
+}
+
 function updateTrayIcon(): void {
   if (!tray) return;
   
@@ -239,7 +260,7 @@ function updateTrayIcon(): void {
       icon = createTextIcon(text, false);
       
       const alarmTime = `${String(nearestAlarm.hour).padStart(2, '0')}:${String(nearestAlarm.minute).padStart(2, '0')}:${String(nearestAlarm.second).padStart(2, '0')}`;
-      tooltipText = `Будильник: ${alarmTime} (через ${formatTimeForTray(timeUntil)})`;
+      tooltipText = `Будильник: ${alarmTime} (через ${formatTimeForTooltip(timeUntil)})`;
     } else {
       icon = createTextIcon('—', false);
       tooltipText = 'Будильник не установлен';
