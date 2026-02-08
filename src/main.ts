@@ -1,5 +1,6 @@
 import { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, dialog, screen, Notification } from 'electron';
 import * as path from 'path';
+import * as fs from 'fs';
 import { createCanvas } from 'canvas';
 
 // Расширяем тип app для свойства isQuitting
@@ -36,6 +37,43 @@ let triggeredAlarmsToday: Set<string> = new Set(); // ID будильников,
 let blinkInterval: NodeJS.Timeout | null = null;
 let isBlinking = false;
 let isAlarmActive = false; // Флаг активного будильника (играет звук)
+
+// Путь к файлу настроек
+function getSettingsPath(): string {
+  const appPath = app.getAppPath();
+  return path.join(appPath, 'settings.json');
+}
+
+// Загрузка будильников из файла
+function loadAlarms(): Alarm[] {
+  try {
+    const settingsPath = getSettingsPath();
+    if (fs.existsSync(settingsPath)) {
+      const data = fs.readFileSync(settingsPath, 'utf-8');
+      const settings = JSON.parse(data);
+      if (settings.alarms && Array.isArray(settings.alarms)) {
+        return settings.alarms;
+      }
+    }
+  } catch (error) {
+    console.error('Ошибка при загрузке настроек:', error);
+  }
+  return [];
+}
+
+// Сохранение будильников в файл
+function saveAlarms(): void {
+  try {
+    const settingsPath = getSettingsPath();
+    const settings = {
+      alarms: alarms
+    };
+    const data = JSON.stringify(settings, null, 2);
+    fs.writeFileSync(settingsPath, data, 'utf-8');
+  } catch (error) {
+    console.error('Ошибка при сохранении настроек:', error);
+  }
+}
 
 function updateTrayMenu(): void {
   if (!tray) return;
@@ -264,6 +302,7 @@ function checkAlarms(): void {
         const index = alarms.findIndex(a => a.id === alarm.id);
         if (index !== -1) {
           alarms[index].enabled = false;
+          saveAlarms();
           updateTrayIcon();
           sendAlarmsToRenderer();
         }
@@ -449,6 +488,11 @@ function createWindow(): void {
     }
   });
 
+  // Отправляем загруженные будильники в renderer после загрузки страницы
+  mainWindow.webContents.once('did-finish-load', () => {
+    sendAlarmsToRenderer();
+  });
+
   // Обработка закрытия окна - сворачиваем в tray вместо закрытия
   mainWindow.on('close', (event) => {
     if (!app.isQuitting) {
@@ -493,6 +537,9 @@ function createTray(): void {
 }
 
 app.whenReady().then(() => {
+  // Загружаем будильники из файла при запуске
+  alarms = loadAlarms();
+  
   createWindow();
   createTray();
   startAlarmChecker();
@@ -500,6 +547,7 @@ app.whenReady().then(() => {
   // Обработчики для управления будильниками
   ipcMain.on('alarm-add', (_event, alarm: Alarm) => {
     alarms.push(alarm);
+    saveAlarms();
     updateTrayIcon();
     sendAlarmsToRenderer();
   });
@@ -508,6 +556,7 @@ app.whenReady().then(() => {
     const index = alarms.findIndex(a => a.id === alarm.id);
     if (index !== -1) {
       alarms[index] = alarm;
+      saveAlarms();
       updateTrayIcon();
       sendAlarmsToRenderer();
     }
@@ -515,6 +564,7 @@ app.whenReady().then(() => {
 
   ipcMain.on('alarm-delete', (_event, alarmId: string) => {
     alarms = alarms.filter(a => a.id !== alarmId);
+    saveAlarms();
     updateTrayIcon();
     sendAlarmsToRenderer();
   });
