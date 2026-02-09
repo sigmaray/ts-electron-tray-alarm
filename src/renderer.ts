@@ -208,6 +208,15 @@ function renderAlarms(): void {
             <span>:</span>
             <input type="number" min="0" max="59" value="${secondValue}" class="second-input" id="edit-second-${alarm.id}">
           </div>
+          <div class="quick-time-links">
+            <a href="#" class="quick-time-link" onclick="setQuickTimeSecondsForEdit('${alarm.id}', 30); return false;">через 30 секунд</a>
+            <a href="#" class="quick-time-link" onclick="setQuickTimeSecondsForEdit('${alarm.id}', 60); return false;">через 1 минуту</a>
+            <a href="#" class="quick-time-link" onclick="setQuickTimeForEdit('${alarm.id}', 2); return false;">через 2 минуты</a>
+            <a href="#" class="quick-time-link" onclick="setQuickTimeForEdit('${alarm.id}', 5); return false;">через 5 минут</a>
+            <a href="#" class="quick-time-link" onclick="setQuickTimeForEdit('${alarm.id}', 30); return false;">через 30 минут</a>
+            <a href="#" class="quick-time-link" onclick="setQuickTimeForEdit('${alarm.id}', 60); return false;">через 1 час</a>
+            <a href="#" class="quick-time-link" onclick="setQuickTimeForEdit('${alarm.id}', 120); return false;">через 2 часа</a>
+          </div>
           <div class="alarm-actions">
             <button class="btn-save" onclick="saveAlarm('${alarm.id}')">Сохранить</button>
             <button class="btn-cancel" onclick="cancelEdit('${alarm.id}')">Отмена</button>
@@ -311,6 +320,48 @@ function setQuickTimeSeconds(seconds: number): void {
   const hourInput = document.getElementById('newHour') as HTMLInputElement;
   const minuteInput = document.getElementById('newMinute') as HTMLInputElement;
   const secondInput = document.getElementById('newSecond') as HTMLInputElement;
+  
+  if (!hourInput || !minuteInput || !secondInput) return;
+
+  // Вычисляем время через указанное количество секунд
+  const now = new Date();
+  const alarmTime = new Date(now.getTime() + seconds * 1000);
+  
+  const hour = alarmTime.getHours();
+  const minute = alarmTime.getMinutes();
+  const second = alarmTime.getSeconds();
+
+  // Устанавливаем значения в поля ввода
+  hourInput.value = String(hour).padStart(2, '0');
+  minuteInput.value = String(minute).padStart(2, '0');
+  secondInput.value = String(second).padStart(2, '0');
+}
+
+function setQuickTimeForEdit(alarmId: string, minutes: number): void {
+  const hourInput = document.getElementById(`edit-hour-${alarmId}`) as HTMLInputElement;
+  const minuteInput = document.getElementById(`edit-minute-${alarmId}`) as HTMLInputElement;
+  const secondInput = document.getElementById(`edit-second-${alarmId}`) as HTMLInputElement;
+  
+  if (!hourInput || !minuteInput || !secondInput) return;
+
+  // Вычисляем время через указанное количество минут
+  const now = new Date();
+  const alarmTime = new Date(now.getTime() + minutes * 60 * 1000);
+  
+  const hour = alarmTime.getHours();
+  const minute = alarmTime.getMinutes();
+  const second = alarmTime.getSeconds();
+
+  // Устанавливаем значения в поля ввода
+  hourInput.value = String(hour).padStart(2, '0');
+  minuteInput.value = String(minute).padStart(2, '0');
+  secondInput.value = String(second).padStart(2, '0');
+}
+
+function setQuickTimeSecondsForEdit(alarmId: string, seconds: number): void {
+  const hourInput = document.getElementById(`edit-hour-${alarmId}`) as HTMLInputElement;
+  const minuteInput = document.getElementById(`edit-minute-${alarmId}`) as HTMLInputElement;
+  const secondInput = document.getElementById(`edit-second-${alarmId}`) as HTMLInputElement;
   
   if (!hourInput || !minuteInput || !secondInput) return;
 
@@ -667,6 +718,8 @@ function showAlarmNotification(alarm: Alarm): void {
 (window as any).toggleRecurring = toggleRecurring;
 (window as any).setQuickTime = setQuickTime;
 (window as any).setQuickTimeSeconds = setQuickTimeSeconds;
+(window as any).setQuickTimeForEdit = setQuickTimeForEdit;
+(window as any).setQuickTimeSecondsForEdit = setQuickTimeSecondsForEdit;
 
 // Инициализация при загрузке страницы
 document.addEventListener('DOMContentLoaded', () => {
