@@ -307,6 +307,27 @@ function setQuickTime(minutes: number): void {
   secondInput.value = String(second).padStart(2, '0');
 }
 
+function setQuickTimeSeconds(seconds: number): void {
+  const hourInput = document.getElementById('newHour') as HTMLInputElement;
+  const minuteInput = document.getElementById('newMinute') as HTMLInputElement;
+  const secondInput = document.getElementById('newSecond') as HTMLInputElement;
+  
+  if (!hourInput || !minuteInput || !secondInput) return;
+
+  // Вычисляем время через указанное количество секунд
+  const now = new Date();
+  const alarmTime = new Date(now.getTime() + seconds * 1000);
+  
+  const hour = alarmTime.getHours();
+  const minute = alarmTime.getMinutes();
+  const second = alarmTime.getSeconds();
+
+  // Устанавливаем значения в поля ввода
+  hourInput.value = String(hour).padStart(2, '0');
+  minuteInput.value = String(minute).padStart(2, '0');
+  secondInput.value = String(second).padStart(2, '0');
+}
+
 function addAlarm(): void {
   const hourInput = document.getElementById('newHour') as HTMLInputElement;
   const minuteInput = document.getElementById('newMinute') as HTMLInputElement;
@@ -645,6 +666,7 @@ function showAlarmNotification(alarm: Alarm): void {
 (window as any).toggleAlarm = toggleAlarm;
 (window as any).toggleRecurring = toggleRecurring;
 (window as any).setQuickTime = setQuickTime;
+(window as any).setQuickTimeSeconds = setQuickTimeSeconds;
 
 // Инициализация при загрузке страницы
 document.addEventListener('DOMContentLoaded', () => {
