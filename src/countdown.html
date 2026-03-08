@@ -19,7 +19,7 @@
       height: 100vh;
       overflow: hidden;
     }
-    #countdown-box {
+    #countdown-display {
       font-size: 20px;
       font-weight: bold;
       color: #ffffff;
@@ -31,18 +31,10 @@
       user-select: none;
       -webkit-app-region: drag;
     }
-    #countdown-box .label {
-      font-size: 0.75em;
-      opacity: 0.9;
-      margin-right: 8px;
-    }
   </style>
 </head>
 <body>
-  <div id="countdown-box">
-    <span class="label">До будильника:</span>
-    <span id="countdown-display">—</span>
-  </div>
+  <div id="countdown-display">—</div>
   <script>
     (function() {
       const el = document.getElementById('countdown-display');

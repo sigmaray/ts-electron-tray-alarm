@@ -275,11 +275,22 @@ function updateTrayIcon(): void {
   tray.setToolTip(tooltipText);
 }
 
+function formatTimeForCountdownWindow(seconds: number): string {
+  if (seconds <= 0) return '—';
+  if (seconds < 60) return '< 1м';
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const parts: string[] = [];
+  if (hours > 0) parts.push(`${hours}ч`);
+  parts.push(`${minutes}м`);
+  return parts.join(' ');
+}
+
 function getCountdownText(): string {
   const nearestAlarm = getNearestAlarm();
   if (!nearestAlarm) return '—';
   const timeUntil = getTimeUntilAlarm(nearestAlarm);
-  return formatTimeForTooltip(timeUntil);
+  return formatTimeForCountdownWindow(timeUntil);
 }
 
 function updateCountdownWindow(): void {
