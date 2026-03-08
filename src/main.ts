@@ -13,6 +13,7 @@ declare global {
 }
 
 let mainWindow: BrowserWindow | null = null;
+let countdownWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 
 // Константа для управления разрешением только одного экземпляра приложения
@@ -274,6 +275,94 @@ function updateTrayIcon(): void {
   tray.setToolTip(tooltipText);
 }
 
+function getCountdownText(): string {
+  const nearestAlarm = getNearestAlarm();
+  if (!nearestAlarm) return '—';
+  const timeUntil = getTimeUntilAlarm(nearestAlarm);
+  return formatTimeForTooltip(timeUntil);
+}
+
+function updateCountdownWindow(): void {
+  if (countdownWindow && !countdownWindow.isDestroyed()) {
+    const text = getCountdownText();
+    countdownWindow.webContents.send('countdown-update', text);
+  }
+}
+
+function createCountdownWindow(): void {
+  if (countdownWindow && !countdownWindow.isDestroyed()) {
+    countdownWindow.show();
+    updateCountdownWindow();
+    sendCountdownWindowState();
+    return;
+  }
+
+  const primaryDisplay = screen.getPrimaryDisplay();
+  const { width: screenWidth, height: screenHeight } = primaryDisplay.workAreaSize;
+  const { x: screenX, y: screenY } = primaryDisplay.workArea;
+
+  const windowWidth = 280;
+  const windowHeight = 70;
+  const x = screenX + screenWidth - windowWidth - 20;
+  const y = screenY + screenHeight - windowHeight - 20;
+
+  countdownWindow = new BrowserWindow({
+    width: windowWidth,
+    height: windowHeight,
+    x,
+    y,
+    frame: false,
+    alwaysOnTop: true,
+    transparent: true,
+    resizable: false,
+    show: false,
+    skipTaskbar: true,
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+      preload: path.join(__dirname, 'preload.js'),
+    },
+  });
+
+  countdownWindow.loadFile(path.join(__dirname, 'countdown.html'));
+
+  countdownWindow.once('ready-to-show', () => {
+    if (countdownWindow) {
+      updateCountdownWindow();
+      countdownWindow.show();
+      sendCountdownWindowState();
+    }
+  });
+
+  countdownWindow.on('closed', () => {
+    countdownWindow = null;
+    sendCountdownWindowState();
+  });
+}
+
+function destroyCountdownWindow(): void {
+  if (countdownWindow) {
+    countdownWindow.close();
+    countdownWindow = null;
+  }
+  sendCountdownWindowState();
+}
+
+function toggleCountdownWindow(): void {
+  if (countdownWindow && !countdownWindow.isDestroyed()) {
+    destroyCountdownWindow();
+  } else {
+    createCountdownWindow();
+  }
+}
+
+function sendCountdownWindowState(): void {
+  const visible = !!(countdownWindow && !countdownWindow.isDestroyed());
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('countdown-window-state', visible);
+  }
+}
+
 function startBlinking(): void {
   if (blinkInterval) return;
   
@@ -388,6 +477,7 @@ function startAlarmChecker(): void {
   alarmCheckInterval = setInterval(() => {
     checkAlarms();
     updateTrayIcon(); // Обновляем иконку трея с актуальным временем
+    updateCountdownWindow();
   }, 1000);
 }
 
@@ -515,6 +605,7 @@ function createWindow(): void {
   // Отправляем загруженные будильники в renderer после загрузки страницы
   mainWindow.webContents.once('did-finish-load', () => {
     sendAlarmsToRenderer();
+    sendCountdownWindowState();
   });
 
   // Обработка закрытия окна - сворачиваем в tray вместо закрытия
@@ -628,6 +719,11 @@ function initializeApp(): void {
   // Обработчик остановки мигания будильника (когда пользователь отключает звук)
   ipcMain.on('alarm-dismiss', () => {
     stopBlinking();
+  });
+
+  // Окно отсчёта времени
+  ipcMain.on('countdown-window-toggle', () => {
+    toggleCountdownWindow();
   });
 
   app.on('activate', () => {

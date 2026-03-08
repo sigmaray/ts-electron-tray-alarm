@@ -21,6 +21,9 @@ interface ElectronAPI {
   onAlarmDismissFromMain: (callback: () => void) => void;
   removeAlarmsUpdatedListener: () => void;
   removeAlarmTriggeredListener: () => void;
+  toggleCountdownWindow: () => void;
+  onCountdownWindowState: (callback: (visible: boolean) => void) => void;
+  onCountdownUpdate: (callback: (text: string) => void) => void;
 }
 
 let alarms: Alarm[] = [];
@@ -730,6 +733,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const electronAPI = (window as any).electronAPI as ElectronAPI | undefined;
   if (electronAPI) {
+    // Состояние окна отсчёта времени
+    electronAPI.onCountdownWindowState((visible: boolean) => {
+      const btn = document.getElementById('countdownWindowBtn') as HTMLButtonElement;
+      if (btn) {
+        btn.textContent = visible ? 'Скрыть окно отсчёта времени' : 'Показывать окно отсчёта времени';
+      }
+    });
+
     // Запрашиваем список будильников
     electronAPI.getAllAlarms();
 
@@ -832,8 +843,16 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // Обработчики кнопок управления приложением
+  const countdownWindowBtn = document.getElementById('countdownWindowBtn');
   const minimizeBtn = document.getElementById('minimizeBtn');
   const closeBtn = document.getElementById('closeBtn');
+
+  if (countdownWindowBtn) {
+    countdownWindowBtn.addEventListener('click', () => {
+      const api = (window as any).electronAPI as ElectronAPI | undefined;
+      if (api) api.toggleCountdownWindow();
+    });
+  }
 
   if (minimizeBtn) {
     minimizeBtn.addEventListener('click', () => {

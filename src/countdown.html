@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Осталось до будильника</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: transparent;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      overflow: hidden;
+    }
+    #countdown-box {
+      font-size: 20px;
+      font-weight: bold;
+      color: #ffffff;
+      text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+      background: rgba(91, 127, 166, 0.95);
+      padding: 14px 24px;
+      border-radius: 10px;
+      letter-spacing: 1px;
+      user-select: none;
+      -webkit-app-region: drag;
+    }
+    #countdown-box .label {
+      font-size: 0.75em;
+      opacity: 0.9;
+      margin-right: 8px;
+    }
+  </style>
+</head>
+<body>
+  <div id="countdown-box">
+    <span class="label">До будильника:</span>
+    <span id="countdown-display">—</span>
+  </div>
+  <script>
+    (function() {
+      const el = document.getElementById('countdown-display');
+      if (window.electronAPI && typeof window.electronAPI.onCountdownUpdate === 'function') {
+        window.electronAPI.onCountdownUpdate(function(text) {
+          if (el) el.textContent = text;
+        });
+      } else if (el) {
+        el.textContent = '—';
+      }
+    })();
+  </script>
+</body>
+</html>

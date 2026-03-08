@@ -52,6 +52,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   removeAlarmTriggeredListener: () => {
     ipcRenderer.removeAllListeners('alarm-triggered');
-  }
+  },
+  // Окно отсчёта времени
+  toggleCountdownWindow: () => {
+    ipcRenderer.send('countdown-window-toggle');
+  },
+  onCountdownWindowState: (callback: (visible: boolean) => void) => {
+    ipcRenderer.on('countdown-window-state', (_event, visible: boolean) => callback(visible));
+  },
+  onCountdownUpdate: (callback: (text: string) => void) => {
+    ipcRenderer.on('countdown-update', (_event, text: string) => callback(text));
+  },
 });
 
