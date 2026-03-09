@@ -18,33 +18,35 @@
       align-items: center;
       height: 100vh;
       overflow: hidden;
-      position: relative;
     }
-    #countdown-display {
+    .countdown-box {
+      position: relative;
       font-size: 20px;
       font-weight: bold;
       color: #ffffff;
       text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
       background: rgba(91, 127, 166, 0.95);
-      padding: 14px 24px;
+      padding: 14px 36px 14px 24px;
       border-radius: 10px;
       letter-spacing: 1px;
       user-select: none;
       -webkit-app-region: drag;
-      max-width: calc(100% - 45px);
+    }
+    #countdown-display {
+      display: block;
     }
     #countdown-close {
       position: absolute;
       top: 6px;
-      right: 8px;
-      width: 26px;
-      height: 26px;
+      right: 6px;
+      width: 22px;
+      height: 22px;
       padding: 0;
       border: none;
-      border-radius: 6px;
-      background: rgba(0, 0, 0, 0.5);
+      border-radius: 4px;
+      background: rgba(0, 0, 0, 0.35);
       color: #fff;
-      font-size: 18px;
+      font-size: 16px;
       font-weight: bold;
       line-height: 1;
       cursor: pointer;
@@ -52,8 +54,6 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      z-index: 10;
-      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
     }
     #countdown-close:hover {
       background: rgba(200, 80, 80, 0.9);
@@ -61,8 +61,10 @@
   </style>
 </head>
 <body>
-  <div id="countdown-display">—</div>
-  <button type="button" id="countdown-close" title="Закрыть">×</button>
+  <div class="countdown-box">
+    <span id="countdown-display">—</span>
+    <button type="button" id="countdown-close" title="Закрыть">×</button>
+  </div>
   <script>
     (function() {
       const el = document.getElementById('countdown-display');
