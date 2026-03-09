@@ -48,35 +48,49 @@ function getSettingsPath(): string {
   return path.join(appPath, 'settings.json');
 }
 
-// Загрузка будильников из файла
-function loadAlarms(): Alarm[] {
+interface AppSettings {
+  alarms: Alarm[];
+  countdownWindowVisible: boolean;
+}
+
+// Загрузка настроек из файла
+function loadSettings(): AppSettings {
   try {
     const settingsPath = getSettingsPath();
     if (fs.existsSync(settingsPath)) {
       const data = fs.readFileSync(settingsPath, 'utf-8');
       const settings = JSON.parse(data);
-      if (settings.alarms && Array.isArray(settings.alarms)) {
-        return settings.alarms;
-      }
+      return {
+        alarms: settings.alarms && Array.isArray(settings.alarms) ? settings.alarms : [],
+        countdownWindowVisible: Boolean(settings.countdownWindowVisible),
+      };
     }
   } catch (error) {
     console.error('Ошибка при загрузке настроек:', error);
   }
-  return [];
+  return { alarms: [], countdownWindowVisible: false };
 }
 
-// Сохранение будильников в файл
-function saveAlarms(): void {
+// Сохранение настроек в файл
+function saveSettings(): void {
   try {
     const settingsPath = getSettingsPath();
-    const settings = {
-      alarms: alarms
+    const settings: AppSettings = {
+      alarms,
+      countdownWindowVisible: countdownWindowVisiblePref,
     };
     const data = JSON.stringify(settings, null, 2);
     fs.writeFileSync(settingsPath, data, 'utf-8');
   } catch (error) {
     console.error('Ошибка при сохранении настроек:', error);
   }
+}
+
+let countdownWindowVisiblePref = false;
+
+// Сохранение будильников в файл (сохраняет все настройки)
+function saveAlarms(): void {
+  saveSettings();
 }
 
 function updateTrayMenu(): void {
@@ -304,6 +318,8 @@ function createCountdownWindow(): void {
   if (countdownWindow && !countdownWindow.isDestroyed()) {
     countdownWindow.show();
     updateCountdownWindow();
+    countdownWindowVisiblePref = true;
+    saveSettings();
     sendCountdownWindowState();
     return;
   }
@@ -341,12 +357,16 @@ function createCountdownWindow(): void {
     if (countdownWindow) {
       updateCountdownWindow();
       countdownWindow.show();
+      countdownWindowVisiblePref = true;
+      saveSettings();
       sendCountdownWindowState();
     }
   });
 
   countdownWindow.on('closed', () => {
     countdownWindow = null;
+    countdownWindowVisiblePref = false;
+    saveSettings();
     sendCountdownWindowState();
   });
 }
@@ -356,6 +376,8 @@ function destroyCountdownWindow(): void {
     countdownWindow.close();
     countdownWindow = null;
   }
+  countdownWindowVisiblePref = false;
+  saveSettings();
   sendCountdownWindowState();
 }
 
@@ -664,12 +686,18 @@ function createTray(): void {
 
 // Функция инициализации приложения
 function initializeApp(): void {
-  // Загружаем будильники из файла при запуске
-  alarms = loadAlarms();
-  
+  // Загружаем настройки из файла при запуске
+  const settings = loadSettings();
+  alarms = settings.alarms;
+  countdownWindowVisiblePref = settings.countdownWindowVisible;
+
   createWindow();
   createTray();
   startAlarmChecker();
+
+  if (countdownWindowVisiblePref) {
+    createCountdownWindow();
+  }
 
   // Обработчики для управления будильниками
   ipcMain.on('alarm-add', (_event, alarm: Alarm) => {
