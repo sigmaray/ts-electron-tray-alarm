@@ -48,9 +48,85 @@ function getSettingsPath(): string {
   return path.join(appPath, 'settings.json');
 }
 
+// Системная таймзона
+function getSystemTimezone(): string {
+  return Intl.DateTimeFormat().resolvedOptions().timeZone;
+}
+
+// Список таймзон для старых сред без Intl.supportedValuesOf
+function getFallbackTimezones(): string[] {
+  return [
+    'Europe/Moscow', 'Europe/Samara', 'Europe/Volgograd', 'Europe/Kaliningrad',
+    'Europe/Minsk', 'Europe/Kyiv', 'Europe/London', 'Europe/Paris', 'Europe/Berlin',
+    'Asia/Yekaterinburg', 'Asia/Novosibirsk', 'Asia/Vladivostok', 'Asia/Tokyo',
+    'Asia/Shanghai', 'Asia/Almaty', 'America/New_York', 'America/Los_Angeles',
+    'America/Chicago', 'UTC',
+  ];
+}
+
+// Активная таймзона (из настроек или системная)
+function getEffectiveTimezone(): string {
+  if (timezonePref && timezonePref.trim() !== '') {
+    return timezonePref;
+  }
+  return getSystemTimezone();
+}
+
+// Текущие локальные час, минута, секунда и дата в указанной таймзоне
+function getLocalTimeInTimezone(tz: string): { year: number; month: number; day: number; hour: number; minute: number; second: number } {
+  const now = new Date();
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: tz,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  });
+  const parts = formatter.formatToParts(now);
+  const get = (type: string) => {
+    const p = parts.find(x => x.type === type);
+    return p ? parseInt(p.value, 10) : 0;
+  };
+  return {
+    year: get('year'),
+    month: get('month'),
+    day: get('day'),
+    hour: get('hour'),
+    minute: get('minute'),
+    second: get('second'),
+  };
+}
+
+// UTC-метка момента (year, month, day, hour, minute, second) в таймзоне tz
+function getTimestampInTimezone(tz: string, year: number, month: number, day: number, hour: number, minute: number, second: number): number {
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: tz,
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  });
+  const dayNoonUTC = Date.UTC(year, month - 1, day, 12, 0, 0);
+  const parts = formatter.formatToParts(dayNoonUTC);
+  const get = (type: string) => {
+    const p = parts.find(x => x.type === type);
+    return p ? parseInt(p.value, 10) : 0;
+  };
+  const localHour = get('hour');
+  const localMinute = get('minute');
+  const localSecond = get('second');
+  const offsetSec = (localHour * 3600 + localMinute * 60 + localSecond) - 12 * 3600;
+  const offsetMs = offsetSec * 1000;
+  return Date.UTC(year, month - 1, day, hour, minute, second) - offsetMs;
+}
+
 interface AppSettings {
   alarms: Alarm[];
   countdownWindowVisible: boolean;
+  timezone?: string | null;
 }
 
 // Загрузка настроек из файла
@@ -63,6 +139,7 @@ function loadSettings(): AppSettings {
       return {
         alarms: settings.alarms && Array.isArray(settings.alarms) ? settings.alarms : [],
         countdownWindowVisible: Boolean(settings.countdownWindowVisible),
+        timezone: settings.timezone != null ? String(settings.timezone) : undefined,
       };
     }
   } catch (error) {
@@ -78,6 +155,7 @@ function saveSettings(): void {
     const settings: AppSettings = {
       alarms,
       countdownWindowVisible: countdownWindowVisiblePref,
+      timezone: timezonePref,
     };
     const data = JSON.stringify(settings, null, 2);
     fs.writeFileSync(settingsPath, data, 'utf-8');
@@ -87,6 +165,7 @@ function saveSettings(): void {
 }
 
 let countdownWindowVisiblePref = false;
+let timezonePref: string | null = null; // null = системная таймзона
 
 // Сохранение будильников в файл (сохраняет все настройки)
 function saveAlarms(): void {
@@ -186,16 +265,16 @@ function createTextIcon(text: string, isBlinking: boolean = false): Electron.Nat
 }
 
 function getTimeUntilAlarm(alarm: Alarm): number {
+  const tz = getEffectiveTimezone();
   const now = new Date();
-  const alarmTime = new Date();
-  alarmTime.setHours(alarm.hour, alarm.minute, alarm.second, 0);
-  
-  // Если время будильника уже прошло сегодня, берем завтрашний день
-  if (alarmTime <= now) {
-    alarmTime.setDate(alarmTime.getDate() + 1);
+  const local = getLocalTimeInTimezone(tz);
+  let alarmTs = getTimestampInTimezone(tz, local.year, local.month, local.day, alarm.hour, alarm.minute, alarm.second);
+  if (alarmTs <= now.getTime()) {
+    const nextDay = new Date(local.year, local.month - 1, local.day);
+    nextDay.setDate(nextDay.getDate() + 1);
+    alarmTs = getTimestampInTimezone(tz, nextDay.getFullYear(), nextDay.getMonth() + 1, nextDay.getDate(), alarm.hour, alarm.minute, alarm.second);
   }
-  
-  return Math.floor((alarmTime.getTime() - now.getTime()) / 1000);
+  return Math.floor((alarmTs - now.getTime()) / 1000);
 }
 
 function getNearestAlarm(): Alarm | null {
@@ -415,25 +494,26 @@ function stopBlinking(): void {
 }
 
 function checkAlarms(): void {
-  const now = new Date();
-  const currentDate = now.toDateString();
-  const currentHour = now.getHours();
-  const currentMinute = now.getMinutes();
-  const currentSecond = now.getSeconds();
-  
+  const tz = getEffectiveTimezone();
+  const local = getLocalTimeInTimezone(tz);
+  const currentDate = `${local.year}-${String(local.month).padStart(2, '0')}-${String(local.day).padStart(2, '0')}`;
+  const currentHour = local.hour;
+  const currentMinute = local.minute;
+  const currentSecond = local.second;
+
   // Сбрасываем множество сработавших будильников при смене дня
   if (lastTriggeredDate !== currentDate) {
     triggeredAlarmsToday.clear();
     lastTriggeredDate = currentDate;
   }
-  
+
   for (const alarm of alarms) {
     if (!alarm.enabled) continue;
-    
+
     // Проверяем, не сработал ли уже этот будильник сегодня (только для повторяющихся)
     if (alarm.recurring && triggeredAlarmsToday.has(alarm.id)) continue;
-    
-    // Проверяем точное время (час, минута и секунда)
+
+    // Проверяем точное время (час, минута и секунда) в выбранной таймзоне
     if (alarm.hour === currentHour && alarm.minute === currentMinute && alarm.second === currentSecond) {
       // Триггерим будильник
       triggerAlarm(alarm);
@@ -688,6 +768,7 @@ function initializeApp(): void {
   const settings = loadSettings();
   alarms = settings.alarms;
   countdownWindowVisiblePref = settings.countdownWindowVisible;
+  timezonePref = settings.timezone ?? null;
 
   createWindow();
   createTray();
@@ -764,6 +845,27 @@ function initializeApp(): void {
   });
   ipcMain.on('countdown-window-close', () => {
     destroyCountdownWindow();
+  });
+
+  // Таймзона: список, текущая, установка
+  ipcMain.handle('get-timezones', (): string[] => {
+    const intl = Intl as typeof Intl & { supportedValuesOf?(key: string): string[] };
+    if (typeof intl.supportedValuesOf === 'function') {
+      return intl.supportedValuesOf('timeZone');
+    }
+    return getFallbackTimezones();
+  });
+  ipcMain.handle('get-current-timezone', (): { effective: string; isSystem: boolean } => {
+    const effective = getEffectiveTimezone();
+    const isSystem = timezonePref === null;
+    return { effective, isSystem };
+  });
+  ipcMain.handle('set-timezone', (_event, tz: string | null) => {
+    timezonePref = tz && tz.trim() !== '' ? tz.trim() : null;
+    saveSettings();
+    const effective = getEffectiveTimezone();
+    const isSystem = timezonePref === null;
+    return { effective, isSystem };
   });
 
   app.on('activate', () => {

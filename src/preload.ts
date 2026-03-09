@@ -66,5 +66,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onCountdownUpdate: (callback: (text: string) => void) => {
     ipcRenderer.on('countdown-update', (_event, text: string) => callback(text));
   },
+  // Таймзона
+  getTimezones: () => ipcRenderer.invoke('get-timezones') as Promise<string[]>,
+  getCurrentTimezone: () => ipcRenderer.invoke('get-current-timezone') as Promise<{ effective: string; isSystem: boolean }>,
+  setTimezone: (tz: string | null) => ipcRenderer.invoke('set-timezone', tz) as Promise<{ effective: string; isSystem: boolean }>,
 });
 

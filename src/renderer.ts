@@ -24,6 +24,9 @@ interface ElectronAPI {
   toggleCountdownWindow: () => void;
   onCountdownWindowState: (callback: (visible: boolean) => void) => void;
   onCountdownUpdate: (callback: (text: string) => void) => void;
+  getTimezones: () => Promise<string[]>;
+  getCurrentTimezone: () => Promise<{ effective: string; isSystem: boolean }>;
+  setTimezone: (tz: string | null) => Promise<{ effective: string; isSystem: boolean }>;
 }
 
 let alarms: Alarm[] = [];
@@ -34,6 +37,24 @@ let isAlarmPlaying: boolean = false;
 let alarmNotification: Notification | null = null;
 let notificationCheckInterval: NodeJS.Timeout | null = null;
 let timeUpdateInterval: NodeJS.Timeout | null = null;
+let currentTimezoneInfo: { effective: string; isSystem: boolean } | null = null;
+let timeTimezoneInterval: ReturnType<typeof setInterval> | null = null;
+
+function updateTimeTimezoneDisplay(): void {
+  const el = document.getElementById('currentTimeTimezone');
+  if (!el || !currentTimezoneInfo) return;
+  const formatter = new Intl.DateTimeFormat('ru', {
+    timeZone: currentTimezoneInfo.effective,
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
+  const timeStr = formatter.format(new Date());
+  const tzLabel = currentTimezoneInfo.isSystem
+    ? `Системная таймзона: ${currentTimezoneInfo.effective}`
+    : ` ${currentTimezoneInfo.effective}`;
+  el.textContent = `${timeStr} (${tzLabel})`;
+}
 
 function generateAlarmId(): string {
   return `alarm-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
@@ -741,6 +762,14 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     });
 
+    // Время и таймзона в основном окне
+    electronAPI.getCurrentTimezone().then((info) => {
+      currentTimezoneInfo = info;
+      updateTimeTimezoneDisplay();
+      if (timeTimezoneInterval) clearInterval(timeTimezoneInterval);
+      timeTimezoneInterval = setInterval(updateTimeTimezoneDisplay, 60000);
+    });
+
     // Запрашиваем список будильников
     electronAPI.getAllAlarms();
 
@@ -879,6 +908,97 @@ document.addEventListener('DOMContentLoaded', () => {
   const dismissBtn = document.getElementById('dismissAlarmBtn');
   if (dismissBtn) {
     dismissBtn.addEventListener('click', dismissAlarm);
+  }
+
+  // Окно выбора таймзоны
+  const timezoneBtn = document.getElementById('timezoneBtn');
+  const timezoneModalOverlay = document.getElementById('timezoneModalOverlay');
+  const timezoneList = document.getElementById('timezoneList');
+  const timezoneSearch = document.getElementById('timezoneSearch') as HTMLInputElement;
+  const timezoneCurrentLabel = document.getElementById('timezoneCurrentLabel');
+  const timezoneSaveBtn = document.getElementById('timezoneSaveBtn');
+  const timezoneCancelBtn = document.getElementById('timezoneCancelBtn');
+
+  let allTimezones: string[] = [];
+  let selectedTimezoneValue: string | null = null;
+
+  function renderTimezoneList(filter: string): void {
+    if (!timezoneList) return;
+    const q = (filter || '').toLowerCase().trim();
+    const filtered = q
+      ? allTimezones.filter(tz => tz.toLowerCase().includes(q))
+      : allTimezones;
+    const systemLabel = 'Системная таймзона (по умолчанию)';
+    const selected = selectedTimezoneValue;
+    const systemSelected = selected === null ? ' selected' : '';
+    let html = `<div class="tz-option system${systemSelected}" data-tz="">${systemLabel}</div>`;
+    filtered.forEach(tz => {
+      const cls = tz === selected ? 'tz-option selected' : 'tz-option';
+      html += `<div class="${cls}" data-tz="${escapeHtml(tz)}">${escapeHtml(tz)}</div>`;
+    });
+    timezoneList.innerHTML = html;
+    timezoneList.querySelectorAll('.tz-option').forEach(el => {
+      el.addEventListener('click', () => {
+        selectedTimezoneValue = (el as HTMLElement).getAttribute('data-tz') || null;
+        if (selectedTimezoneValue === '') selectedTimezoneValue = null;
+        renderTimezoneList(timezoneSearch ? timezoneSearch.value : '');
+      });
+    });
+  }
+
+  function escapeHtml(s: string): string {
+    const div = document.createElement('div');
+    div.textContent = s;
+    return div.innerHTML;
+  }
+
+  if (timezoneBtn && timezoneModalOverlay && electronAPI) {
+    timezoneBtn.addEventListener('click', async () => {
+      const { effective, isSystem } = await electronAPI.getCurrentTimezone();
+      timezoneCurrentLabel!.textContent = isSystem
+        ? `Текущая: Системная таймзона (${effective})`
+        : 'Текущая: ' + effective;
+      selectedTimezoneValue = isSystem ? null : effective;
+      if (allTimezones.length === 0) {
+        allTimezones = await electronAPI.getTimezones();
+        allTimezones.sort();
+      }
+      renderTimezoneList(timezoneSearch ? timezoneSearch.value : '');
+      timezoneModalOverlay.classList.add('visible');
+      timezoneSearch?.focus();
+    });
+  }
+
+  if (timezoneSearch) {
+    timezoneSearch.addEventListener('input', () => {
+      renderTimezoneList(timezoneSearch.value);
+    });
+  }
+
+  if (timezoneSaveBtn && timezoneModalOverlay && electronAPI) {
+    timezoneSaveBtn.addEventListener('click', async () => {
+      const { effective, isSystem } = await electronAPI.setTimezone(selectedTimezoneValue);
+      currentTimezoneInfo = { effective, isSystem };
+      updateTimeTimezoneDisplay();
+      timezoneCurrentLabel!.textContent = isSystem
+        ? `Текущая: Системная таймзона (${effective})`
+        : 'Текущая: ' + effective;
+      timezoneModalOverlay.classList.remove('visible');
+    });
+  }
+
+  if (timezoneCancelBtn && timezoneModalOverlay) {
+    timezoneCancelBtn.addEventListener('click', () => {
+      timezoneModalOverlay.classList.remove('visible');
+    });
+  }
+
+  if (timezoneModalOverlay) {
+    timezoneModalOverlay.addEventListener('click', (e) => {
+      if (e.target === timezoneModalOverlay) {
+        timezoneModalOverlay.classList.remove('visible');
+      }
+    });
   }
 });
 
