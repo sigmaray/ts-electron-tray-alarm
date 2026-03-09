@@ -365,8 +365,6 @@ function createCountdownWindow(): void {
 
   countdownWindow.on('closed', () => {
     countdownWindow = null;
-    countdownWindowVisiblePref = false;
-    saveSettings();
     sendCountdownWindowState();
   });
 }
