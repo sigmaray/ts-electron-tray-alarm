@@ -314,8 +314,8 @@ function createCountdownWindow(): void {
 
   const windowWidth = 280;
   const windowHeight = 70;
-  const x = screenX + screenWidth - windowWidth - 20;
-  const y = screenY + screenHeight - windowHeight - 20;
+  const x = screenX + screenWidth - windowWidth;
+  const y = screenY + screenHeight - windowHeight;
 
   countdownWindow = new BrowserWindow({
     width: windowWidth,
