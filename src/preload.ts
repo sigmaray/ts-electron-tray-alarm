@@ -57,6 +57,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   toggleCountdownWindow: () => {
     ipcRenderer.send('countdown-window-toggle');
   },
+  closeCountdownWindow: () => {
+    ipcRenderer.send('countdown-window-close');
+  },
   onCountdownWindowState: (callback: (visible: boolean) => void) => {
     ipcRenderer.on('countdown-window-state', (_event, visible: boolean) => callback(visible));
   },

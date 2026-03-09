@@ -18,6 +18,7 @@
       align-items: center;
       height: 100vh;
       overflow: hidden;
+      position: relative;
     }
     #countdown-display {
       font-size: 20px;
@@ -30,11 +31,38 @@
       letter-spacing: 1px;
       user-select: none;
       -webkit-app-region: drag;
+      max-width: calc(100% - 45px);
+    }
+    #countdown-close {
+      position: absolute;
+      top: 6px;
+      right: 8px;
+      width: 26px;
+      height: 26px;
+      padding: 0;
+      border: none;
+      border-radius: 6px;
+      background: rgba(0, 0, 0, 0.5);
+      color: #fff;
+      font-size: 18px;
+      font-weight: bold;
+      line-height: 1;
+      cursor: pointer;
+      -webkit-app-region: no-drag;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 10;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+    }
+    #countdown-close:hover {
+      background: rgba(200, 80, 80, 0.9);
     }
   </style>
 </head>
 <body>
   <div id="countdown-display">—</div>
+  <button type="button" id="countdown-close" title="Закрыть">×</button>
   <script>
     (function() {
       const el = document.getElementById('countdown-display');
@@ -44,6 +72,10 @@
         });
       } else if (el) {
         el.textContent = '—';
+      }
+      var closeBtn = document.getElementById('countdown-close');
+      if (closeBtn && window.electronAPI && typeof window.electronAPI.closeCountdownWindow === 'function') {
+        closeBtn.addEventListener('click', function() { window.electronAPI.closeCountdownWindow(); });
       }
     })();
   </script>

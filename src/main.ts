@@ -736,6 +736,9 @@ function initializeApp(): void {
   ipcMain.on('countdown-window-toggle', () => {
     toggleCountdownWindow();
   });
+  ipcMain.on('countdown-window-close', () => {
+    destroyCountdownWindow();
+  });
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
