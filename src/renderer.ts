@@ -64,17 +64,68 @@ function formatTime(hour: number, minute: number, second: number): string {
   return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:${String(second).padStart(2, '0')}`;
 }
 
-function getTimeUntilAlarm(alarm: Alarm): number {
+// Текущие локальные дата и время в указанной таймзоне (для расчёта «через …»)
+function getLocalTimeInTimezone(tz: string): { year: number; month: number; day: number; hour: number; minute: number; second: number } {
   const now = new Date();
-  const alarmTime = new Date();
-  alarmTime.setHours(alarm.hour, alarm.minute, alarm.second, 0);
-  
-  // Если время будильника уже прошло сегодня, берем завтрашний день
-  if (alarmTime <= now) {
-    alarmTime.setDate(alarmTime.getDate() + 1);
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: tz,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  });
+  const parts = formatter.formatToParts(now);
+  const get = (type: string) => {
+    const p = parts.find(x => x.type === type);
+    return p ? parseInt(p.value, 10) : 0;
+  };
+  return {
+    year: get('year'),
+    month: get('month'),
+    day: get('day'),
+    hour: get('hour'),
+    minute: get('minute'),
+    second: get('second'),
+  };
+}
+
+// UTC-метка момента (year, month, day, hour, minute, second) в таймзоне tz
+function getTimestampInTimezone(tz: string, year: number, month: number, day: number, hour: number, minute: number, second: number): number {
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: tz,
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  });
+  const dayNoonUTC = Date.UTC(year, month - 1, day, 12, 0, 0);
+  const parts = formatter.formatToParts(dayNoonUTC);
+  const get = (type: string) => {
+    const p = parts.find(x => x.type === type);
+    return p ? parseInt(p.value, 10) : 0;
+  };
+  const localHour = get('hour');
+  const localMinute = get('minute');
+  const localSecond = get('second');
+  const offsetSec = (localHour * 3600 + localMinute * 60 + localSecond) - 12 * 3600;
+  const offsetMs = offsetSec * 1000;
+  return Date.UTC(year, month - 1, day, hour, minute, second) - offsetMs;
+}
+
+function getTimeUntilAlarm(alarm: Alarm): number {
+  const tz = currentTimezoneInfo?.effective ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const now = new Date();
+  const local = getLocalTimeInTimezone(tz);
+  let alarmTs = getTimestampInTimezone(tz, local.year, local.month, local.day, alarm.hour, alarm.minute, alarm.second);
+  if (alarmTs <= now.getTime()) {
+    const nextDay = new Date(local.year, local.month - 1, local.day);
+    nextDay.setDate(nextDay.getDate() + 1);
+    alarmTs = getTimestampInTimezone(tz, nextDay.getFullYear(), nextDay.getMonth() + 1, nextDay.getDate(), alarm.hour, alarm.minute, alarm.second);
   }
-  
-  return Math.floor((alarmTime.getTime() - now.getTime()) / 1000);
+  return Math.floor((alarmTs - now.getTime()) / 1000);
 }
 
 function formatTimeUntil(seconds: number): string {
