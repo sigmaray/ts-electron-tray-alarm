@@ -115,6 +115,23 @@ function getTimestampInTimezone(tz: string, year: number, month: number, day: nu
   return Date.UTC(year, month - 1, day, hour, minute, second) - offsetMs;
 }
 
+// Локальные час, минута, секунда в таймзоне tz для заданной UTC-метки (для кнопок «через …»)
+function getLocalTimeFromTimestamp(tz: string, timestamp: number): { hour: number; minute: number; second: number } {
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: tz,
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  });
+  const parts = formatter.formatToParts(new Date(timestamp));
+  const get = (type: string) => {
+    const p = parts.find(x => x.type === type);
+    return p ? parseInt(p.value, 10) : 0;
+  };
+  return { hour: get('hour'), minute: get('minute'), second: get('second') };
+}
+
 function getTimeUntilAlarm(alarm: Alarm): number {
   const tz = currentTimezoneInfo?.effective ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
   const now = new Date();
@@ -370,6 +387,10 @@ function renderAlarms(): void {
   }
 }
 
+function getEffectiveTimezoneForQuick(): string {
+  return currentTimezoneInfo?.effective ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
+}
+
 function setQuickTime(minutes: number): void {
   const hourInput = document.getElementById('newHour') as HTMLInputElement;
   const minuteInput = document.getElementById('newMinute') as HTMLInputElement;
@@ -377,15 +398,10 @@ function setQuickTime(minutes: number): void {
   
   if (!hourInput || !minuteInput || !secondInput) return;
 
-  // Вычисляем время через указанное количество минут
-  const now = new Date();
-  const alarmTime = new Date(now.getTime() + minutes * 60 * 1000);
-  
-  const hour = alarmTime.getHours();
-  const minute = alarmTime.getMinutes();
-  const second = alarmTime.getSeconds();
+  const tz = getEffectiveTimezoneForQuick();
+  const futureTs = Date.now() + minutes * 60 * 1000;
+  const { hour, minute, second } = getLocalTimeFromTimestamp(tz, futureTs);
 
-  // Устанавливаем значения в поля ввода
   hourInput.value = String(hour).padStart(2, '0');
   minuteInput.value = String(minute).padStart(2, '0');
   secondInput.value = String(second).padStart(2, '0');
@@ -398,15 +414,10 @@ function setQuickTimeSeconds(seconds: number): void {
   
   if (!hourInput || !minuteInput || !secondInput) return;
 
-  // Вычисляем время через указанное количество секунд
-  const now = new Date();
-  const alarmTime = new Date(now.getTime() + seconds * 1000);
-  
-  const hour = alarmTime.getHours();
-  const minute = alarmTime.getMinutes();
-  const second = alarmTime.getSeconds();
+  const tz = getEffectiveTimezoneForQuick();
+  const futureTs = Date.now() + seconds * 1000;
+  const { hour, minute, second } = getLocalTimeFromTimestamp(tz, futureTs);
 
-  // Устанавливаем значения в поля ввода
   hourInput.value = String(hour).padStart(2, '0');
   minuteInput.value = String(minute).padStart(2, '0');
   secondInput.value = String(second).padStart(2, '0');
@@ -419,15 +430,10 @@ function setQuickTimeForEdit(alarmId: string, minutes: number): void {
   
   if (!hourInput || !minuteInput || !secondInput) return;
 
-  // Вычисляем время через указанное количество минут
-  const now = new Date();
-  const alarmTime = new Date(now.getTime() + minutes * 60 * 1000);
-  
-  const hour = alarmTime.getHours();
-  const minute = alarmTime.getMinutes();
-  const second = alarmTime.getSeconds();
+  const tz = getEffectiveTimezoneForQuick();
+  const futureTs = Date.now() + minutes * 60 * 1000;
+  const { hour, minute, second } = getLocalTimeFromTimestamp(tz, futureTs);
 
-  // Устанавливаем значения в поля ввода
   hourInput.value = String(hour).padStart(2, '0');
   minuteInput.value = String(minute).padStart(2, '0');
   secondInput.value = String(second).padStart(2, '0');
@@ -440,15 +446,10 @@ function setQuickTimeSecondsForEdit(alarmId: string, seconds: number): void {
   
   if (!hourInput || !minuteInput || !secondInput) return;
 
-  // Вычисляем время через указанное количество секунд
-  const now = new Date();
-  const alarmTime = new Date(now.getTime() + seconds * 1000);
-  
-  const hour = alarmTime.getHours();
-  const minute = alarmTime.getMinutes();
-  const second = alarmTime.getSeconds();
+  const tz = getEffectiveTimezoneForQuick();
+  const futureTs = Date.now() + seconds * 1000;
+  const { hour, minute, second } = getLocalTimeFromTimestamp(tz, futureTs);
 
-  // Устанавливаем значения в поля ввода
   hourInput.value = String(hour).padStart(2, '0');
   minuteInput.value = String(minute).padStart(2, '0');
   secondInput.value = String(second).padStart(2, '0');
