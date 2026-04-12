@@ -264,15 +264,32 @@ function createTextIcon(text: string, isBlinking: boolean = false): Electron.Nat
   return nativeImage.createFromBuffer(buffer);
 }
 
+/** Момент срабатывания в календарный день (year/month/day) в таймзоне tz. */
+function getAlarmTimestampOnCalendarDay(
+  alarm: Alarm,
+  tz: string,
+  year: number,
+  month: number,
+  day: number,
+): number {
+  return getTimestampInTimezone(tz, year, month, day, alarm.hour, alarm.minute, alarm.second);
+}
+
 function getTimeUntilAlarm(alarm: Alarm): number {
   const tz = getEffectiveTimezone();
   const now = new Date();
   const local = getLocalTimeInTimezone(tz);
-  let alarmTs = getTimestampInTimezone(tz, local.year, local.month, local.day, alarm.hour, alarm.minute, alarm.second);
+  let alarmTs = getAlarmTimestampOnCalendarDay(alarm, tz, local.year, local.month, local.day);
   if (alarmTs <= now.getTime()) {
     const nextDay = new Date(local.year, local.month - 1, local.day);
     nextDay.setDate(nextDay.getDate() + 1);
-    alarmTs = getTimestampInTimezone(tz, nextDay.getFullYear(), nextDay.getMonth() + 1, nextDay.getDate(), alarm.hour, alarm.minute, alarm.second);
+    alarmTs = getAlarmTimestampOnCalendarDay(
+      alarm,
+      tz,
+      nextDay.getFullYear(),
+      nextDay.getMonth() + 1,
+      nextDay.getDate(),
+    );
   }
   return Math.floor((alarmTs - now.getTime()) / 1000);
 }
@@ -497,9 +514,7 @@ function checkAlarms(): void {
   const tz = getEffectiveTimezone();
   const local = getLocalTimeInTimezone(tz);
   const currentDate = `${local.year}-${String(local.month).padStart(2, '0')}-${String(local.day).padStart(2, '0')}`;
-  const currentHour = local.hour;
-  const currentMinute = local.minute;
-  const currentSecond = local.second;
+  const nowMs = Date.now();
 
   // Сбрасываем множество сработавших будильников при смене дня
   if (lastTriggeredDate !== currentDate) {
@@ -513,23 +528,21 @@ function checkAlarms(): void {
     // Проверяем, не сработал ли уже этот будильник сегодня (только для повторяющихся)
     if (alarm.recurring && triggeredAlarmsToday.has(alarm.id)) continue;
 
-    // Проверяем точное время (час, минута и секунда) в выбранной таймзоне
-    if (alarm.hour === currentHour && alarm.minute === currentMinute && alarm.second === currentSecond) {
-      // Триггерим будильник
-      triggerAlarm(alarm);
-      
-      // Если будильник повторяющийся, добавляем в список сработавших сегодня
-      if (alarm.recurring) {
-        triggeredAlarmsToday.add(alarm.id);
-      } else {
-        // Если будильник неповторяющийся, отключаем его после срабатывания
-        const index = alarms.findIndex(a => a.id === alarm.id);
-        if (index !== -1) {
-          alarms[index].enabled = false;
-          saveAlarms();
-          updateTrayIcon();
-          sendAlarmsToRenderer();
-        }
+    const fireTs = getAlarmTimestampOnCalendarDay(alarm, tz, local.year, local.month, local.day);
+    // Текущее время ≥ целевого: не пропускаем срабатывание при задержке event loop или после сна ОС
+    if (nowMs < fireTs) continue;
+
+    triggerAlarm(alarm);
+
+    if (alarm.recurring) {
+      triggeredAlarmsToday.add(alarm.id);
+    } else {
+      const index = alarms.findIndex(a => a.id === alarm.id);
+      if (index !== -1) {
+        alarms[index].enabled = false;
+        saveAlarms();
+        updateTrayIcon();
+        sendAlarmsToRenderer();
       }
     }
   }
