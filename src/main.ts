@@ -1,6 +1,7 @@
 import { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, dialog, screen, Notification } from 'electron';
 import * as path from 'path';
 import * as fs from 'fs';
+import { randomUUID } from 'crypto';
 import { createCanvas } from 'canvas';
 
 // Расширяем тип app для свойства isQuitting
@@ -129,6 +130,39 @@ interface AppSettings {
   timezone?: string | null;
 }
 
+/** Часы/минуты/секунды из JSON: отсекает дробь, отбрасывает NaN/∞, ограничивает диапазон. */
+function clampTimeUnit(value: unknown, min: number, max: number): number {
+  const n = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(n)) return min;
+  const t = Math.trunc(n);
+  if (t < min) return min;
+  if (t > max) return max;
+  return t;
+}
+
+function parseAlarmFromSettingsJson(raw: unknown): Alarm | null {
+  if (raw === null || typeof raw !== 'object') return null;
+  const o = raw as Record<string, unknown>;
+  const idRaw = o.id;
+  const id =
+    typeof idRaw === 'string' && idRaw.trim() !== ''
+      ? idRaw.trim()
+      : `alarm-${randomUUID()}`;
+  return {
+    id,
+    hour: clampTimeUnit(o.hour, 0, 23),
+    minute: clampTimeUnit(o.minute, 0, 59),
+    second: clampTimeUnit(o.second, 0, 59),
+    enabled: Boolean(o.enabled),
+    recurring: Boolean(o.recurring),
+  };
+}
+
+function parseAlarmsFromSettingsJson(raw: unknown): Alarm[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.map(parseAlarmFromSettingsJson).filter((a): a is Alarm => a !== null);
+}
+
 // Загрузка настроек из файла
 function loadSettings(): AppSettings {
   try {
@@ -137,7 +171,7 @@ function loadSettings(): AppSettings {
       const data = fs.readFileSync(settingsPath, 'utf-8');
       const settings = JSON.parse(data);
       return {
-        alarms: settings.alarms && Array.isArray(settings.alarms) ? settings.alarms : [],
+        alarms: parseAlarmsFromSettingsJson(settings.alarms),
         countdownWindowVisible: Boolean(settings.countdownWindowVisible),
         timezone: settings.timezone != null ? String(settings.timezone) : undefined,
       };
