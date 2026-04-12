@@ -1,11 +1,24 @@
 import { test, expect, _electron as electron } from '@playwright/test';
+import * as fs from 'fs';
 import * as path from 'path';
+
+/** Приложение хранит settings.json рядом с dist/main.js — без очистки e2e видит будильники с прошлых запусков. */
+function removeDistSettings(): void {
+  const settingsPath = path.join(__dirname, '../../dist/settings.json');
+  try {
+    fs.unlinkSync(settingsPath);
+  } catch {
+    // файла нет — нормально
+  }
+}
 
 test.describe('Alarm Application', () => {
   let electronApp: any;
   let window: any;
 
   test.beforeAll(async () => {
+    removeDistSettings();
+
     // Запускаем реальное Electron приложение
     const electronPath = require('electron');
     const mainPath = path.join(__dirname, '../../dist/main.js');
@@ -167,35 +180,27 @@ test.describe('Alarm Application', () => {
   });
 
   test('должен отменять редактирование будильника', async () => {
-    // Добавляем будильник
     await window.fill('#newHour', '09');
     await window.fill('#newMinute', '00');
     await window.fill('#newSecond', '00');
     await window.click('#addAlarmBtn');
     await window.waitForTimeout(500);
-    
-    // Начинаем редактирование
-    const editBtn = window.locator('button:has-text("Редактировать")').first();
-    await editBtn.click();
+
+    const alarmRow = window.locator('.alarm-item:has-text("09:00:00")');
+    await expect(alarmRow).toBeVisible();
+
+    await alarmRow.locator('button:has-text("Редактировать")').click();
     await window.waitForTimeout(300);
-    
-    // Изменяем время
-    const hourInput = window.locator('input[class*="hour-input"]').first();
-    const minuteInput = window.locator('input[class*="minute-input"]').first();
-    const secondInput = window.locator('input[class*="second-input"]').first();
-    await hourInput.fill('20');
-    await minuteInput.fill('00');
-    await secondInput.fill('00');
-    
-    // Отменяем редактирование
-    const cancelBtn = window.locator('button:has-text("Отмена")').first();
-    await cancelBtn.click();
+
+    const editingItem = window.locator('.alarm-item.editing');
+    await editingItem.locator('input.hour-input').fill('20');
+    await editingItem.locator('input.minute-input').fill('00');
+    await editingItem.locator('input.second-input').fill('00');
+
+    await editingItem.locator('button:has-text("Отмена")').click();
     await window.waitForTimeout(500);
-    
-    // Проверяем, что время не изменилось
-    const alarmsList = window.locator('#alarmsList');
-    await expect(alarmsList).toContainText('09:00:00');
-    await expect(alarmsList).not.toContainText('20:00:00');
+
+    await expect(window.locator('.alarm-item:has-text("09:00:00")')).toBeVisible();
   });
 
   test('должен удалять будильник', async () => {
@@ -265,27 +270,27 @@ test.describe('Alarm Application', () => {
   });
 
   test('должен валидировать ввод времени', async () => {
-    // Пробуем установить недопустимое значение часа
     await window.fill('#newHour', '25');
     await window.fill('#newMinute', '00');
     await window.fill('#newSecond', '00');
-    
-    // Устанавливаем обработчик для alert
-    const alertPromise = new Promise<string>((resolve) => {
-      window.evaluate(() => {
-        const originalAlert = window.alert;
-        window.alert = (message: string) => {
-          resolve(message);
-          return true;
-        };
-      });
+
+    // Нативный alert в Electron не даёт стабильного page.on('dialog'); подмена без модальной блокировки.
+    await window.evaluate(() => {
+      (window as unknown as { __validationAlert?: string }).__validationAlert = '';
+      window.alert = (message: string) => {
+        (window as unknown as { __validationAlert?: string }).__validationAlert = message;
+      };
     });
-    
+
     await window.click('#addAlarmBtn');
-    await window.waitForTimeout(300);
-    
-    // Проверяем, что alert был вызван (или что значение не было принято)
-    // В реальном приложении может быть alert или просто игнорирование
+
+    const alertMessage = await window.evaluate(
+      () => (window as unknown as { __validationAlert?: string }).__validationAlert ?? '',
+    );
+    expect(alertMessage).toContain('корректный час');
+
+    const alarmsList = window.locator('#alarmsList');
+    await expect(alarmsList).not.toContainText('25:00:00');
   });
 
   test('должен сортировать будильники по времени', async () => {
@@ -441,7 +446,8 @@ test.describe('Alarm Application', () => {
 
 test.describe('Alarm Application - Initial State', () => {
   test('должен запускаться свернутым в трей', async () => {
-    // Запускаем новое Electron приложение для проверки начального состояния
+    removeDistSettings();
+
     const electronPath = require('electron');
     const mainPath = path.join(__dirname, '../../dist/main.js');
     
