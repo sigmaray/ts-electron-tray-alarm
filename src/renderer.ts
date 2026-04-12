@@ -115,6 +115,13 @@ function getTimestampInTimezone(tz: string, year: number, month: number, day: nu
   return Date.UTC(year, month - 1, day, hour, minute, second) - offsetMs;
 }
 
+/** Сдвиг календарной даты в григорианском календаре. `Date.UTC` — только нормализация (переходы месяца/года), не системная таймзона. */
+function addGregorianCalendarDays(year: number, month: number, day: number, deltaDays: number): { year: number; month: number; day: number } {
+  const ms = Date.UTC(year, month - 1, day + deltaDays);
+  const d = new Date(ms);
+  return { year: d.getUTCFullYear(), month: d.getUTCMonth() + 1, day: d.getUTCDate() };
+}
+
 // Локальные час, минута, секунда в таймзоне tz для заданной UTC-метки (для кнопок «через …»)
 function getLocalTimeFromTimestamp(tz: string, timestamp: number): { hour: number; minute: number; second: number } {
   const formatter = new Intl.DateTimeFormat('en-CA', {
@@ -138,9 +145,8 @@ function getTimeUntilAlarm(alarm: Alarm): number {
   const local = getLocalTimeInTimezone(tz);
   let alarmTs = getTimestampInTimezone(tz, local.year, local.month, local.day, alarm.hour, alarm.minute, alarm.second);
   if (alarmTs <= now.getTime()) {
-    const nextDay = new Date(local.year, local.month - 1, local.day);
-    nextDay.setDate(nextDay.getDate() + 1);
-    alarmTs = getTimestampInTimezone(tz, nextDay.getFullYear(), nextDay.getMonth() + 1, nextDay.getDate(), alarm.hour, alarm.minute, alarm.second);
+    const next = addGregorianCalendarDays(local.year, local.month, local.day, 1);
+    alarmTs = getTimestampInTimezone(tz, next.year, next.month, next.day, alarm.hour, alarm.minute, alarm.second);
   }
   return Math.floor((alarmTs - now.getTime()) / 1000);
 }
