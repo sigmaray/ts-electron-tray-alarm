@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Time Until Alarm</title>
+  <link rel="stylesheet" href="../node_modules/bootstrap/dist/css/bootstrap.min.css">
   <style>
     * {
       margin: 0;
@@ -19,51 +20,19 @@
       height: 100vh;
       overflow: hidden;
     }
-    .countdown-box {
-      position: relative;
-      font-size: 20px;
-      font-weight: bold;
-      color: #ffffff;
-      text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
-      background: rgba(91, 127, 166, 0.95);
-      padding: 14px 36px 14px 24px;
-      border-radius: 10px;
-      letter-spacing: 1px;
+    .countdown-widget {
       user-select: none;
       -webkit-app-region: drag;
     }
-    #countdown-display {
-      display: block;
-    }
-    #countdown-close {
-      position: absolute;
-      top: 6px;
-      right: 6px;
-      width: 22px;
-      height: 22px;
-      padding: 0;
-      border: none;
-      border-radius: 4px;
-      background: rgba(0, 0, 0, 0.35);
-      color: #fff;
-      font-size: 16px;
-      font-weight: bold;
-      line-height: 1;
-      cursor: pointer;
+    .countdown-widget__close {
       -webkit-app-region: no-drag;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-    #countdown-close:hover {
-      background: rgba(200, 80, 80, 0.9);
     }
   </style>
 </head>
 <body>
-  <div class="countdown-box">
-    <span id="countdown-display">—</span>
-    <button type="button" id="countdown-close" title="Close">×</button>
+  <div class="countdown-widget card text-bg-primary shadow-sm border-0 d-flex flex-row align-items-center gap-3 px-3 py-2 fs-5 fw-bold">
+    <span id="countdown-display" class="countdown-widget__display font-monospace">—</span>
+    <button type="button" id="countdown-close" class="countdown-widget__close btn-close btn-close-white" title="Close" aria-label="Close"></button>
   </div>
   <script>
     (function() {

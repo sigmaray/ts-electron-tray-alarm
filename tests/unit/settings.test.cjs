@@ -41,6 +41,24 @@ test('IPC alarm validation accepts only safe IDs and valid fields', () => {
   assert.equal(isValidAlarmPayload(valid), true);
   assert.equal(isValidAlarmPayload({ ...valid, id: "x');alert(1);//" }), false);
   assert.equal(isValidAlarmPayload({ ...valid, minute: 60 }), false);
+  assert.equal(isValidAlarmPayload({ ...valid, scheduledDate: '2026-12-31', message: 'Wake up' }), true);
+  assert.equal(isValidAlarmPayload({ ...valid, scheduledDate: '2026-02-30' }), false);
+  assert.equal(isValidAlarmPayload({ ...valid, message: 'x'.repeat(501) }), false);
+});
+
+test('alarm options survive settings parsing with bounded notification text', () => {
+  const alarm = parseAlarms([{
+    id: 'dated-alarm', hour: 8, minute: 0, second: 0, enabled: true, recurring: false,
+    scheduledDate: '2026-12-31', message: 'Take medication',
+  }])[0];
+  assert.equal(alarm.scheduledDate, '2026-12-31');
+  assert.equal(alarm.message, 'Take medication');
+  const sanitized = parseAlarms([{
+    id: 'dated-alarm', hour: 8, minute: 0, second: 0, enabled: true, recurring: false,
+    scheduledDate: '2026-02-30', message: 'x'.repeat(501),
+  }])[0];
+  assert.equal(sanitized.scheduledDate, undefined);
+  assert.equal(sanitized.message.length, 500);
 });
 
 test('settings migrate from the former app directory into userData', (t) => {

@@ -10,6 +10,8 @@ export interface Alarm {
   enabled: boolean;
   recurring: boolean;
   scheduledAt?: number;
+  scheduledDate?: string;
+  message?: string;
 }
 
 export interface AppSettings {
@@ -56,7 +58,15 @@ function parseAlarm(raw: unknown): Alarm | null {
     enabled: item.enabled === true,
     recurring: item.recurring === true,
     ...(scheduledAt === undefined ? {} : { scheduledAt }),
+    ...(isValidDate(item.scheduledDate) ? { scheduledDate: item.scheduledDate as string } : {}),
+    ...(typeof item.message === 'string' ? { message: item.message.slice(0, 500) } : {}),
   };
+}
+
+function isValidDate(value: unknown): value is string {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const date = new Date(`${value}T00:00:00.000Z`);
+  return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value;
 }
 
 export function parseAlarms(raw: unknown): Alarm[] {
@@ -91,7 +101,9 @@ export function isValidAlarmPayload(value: unknown): value is Alarm {
     && Number.isInteger(alarm.second) && (alarm.second as number) >= 0 && (alarm.second as number) <= 59
     && typeof alarm.enabled === 'boolean'
     && typeof alarm.recurring === 'boolean'
-    && (alarm.scheduledAt === undefined || (typeof alarm.scheduledAt === 'number' && Number.isFinite(alarm.scheduledAt) && Math.abs(alarm.scheduledAt) <= 8.64e15));
+    && (alarm.scheduledAt === undefined || (typeof alarm.scheduledAt === 'number' && Number.isFinite(alarm.scheduledAt) && Math.abs(alarm.scheduledAt) <= 8.64e15))
+    && (alarm.scheduledDate === undefined || isValidDate(alarm.scheduledDate))
+    && (alarm.message === undefined || (typeof alarm.message === 'string' && alarm.message.length <= 500));
 }
 
 export function parseSettings(raw: unknown): AppSettings {

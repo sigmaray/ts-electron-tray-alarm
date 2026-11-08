@@ -414,6 +414,8 @@ function checkAlarms(): void {
     if (alarm.recurring) {
       triggeredAlarmsToday.add(alarm.id);
       alarm.scheduledAt = nextAlarmTimestamp(tz, { ...alarm, scheduledAt: undefined }, nowMs);
+      const nextLocal = localDateTimeInTimezone(tz, alarm.scheduledAt);
+      alarm.scheduledDate = `${nextLocal.year}-${String(nextLocal.month).padStart(2, '0')}-${String(nextLocal.day).padStart(2, '0')}`;
       saveAlarms();
       sendAlarmsToRenderer();
     } else {
@@ -438,7 +440,7 @@ function triggerAlarm(alarm: Alarm): void {
   if (Notification.isSupported()) {
     const notification = new Notification({
       title: '⏰ Alarm!',
-      body: `Time: ${String(alarm.hour).padStart(2, '0')}:${String(alarm.minute).padStart(2, '0')}:${String(alarm.second).padStart(2, '0')}`,
+      body: alarm.message?.trim() || `Time: ${String(alarm.hour).padStart(2, '0')}:${String(alarm.minute).padStart(2, '0')}:${String(alarm.second).padStart(2, '0')}`,
       urgency: 'critical',
     });
     

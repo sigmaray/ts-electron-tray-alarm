@@ -109,6 +109,38 @@ test.describe('Alarm Application', () => {
     await expect(alarmsList).not.toContainText('No alarms set');
   });
 
+  test('sets a scheduled date and notification text from alarm options', async () => {
+    await window.fill('#newHour', '06');
+    await window.fill('#newMinute', '31');
+    await window.fill('#newSecond', '00');
+    await window.click('#newAlarmOptionsBtn');
+    await expect(window.locator('#alarmOptionsOverlay')).toHaveClass(/modal-overlay--visible/);
+    await expect(window.locator('#alarmOptionsHour')).toHaveValue('06');
+    await expect(window.locator('#alarmOptionsMinute')).toHaveValue('31');
+    await expect(window.locator('#alarmOptionsRecurring')).not.toBeChecked();
+    await window.fill('#alarmOptionsDate', '2099-12-31');
+    await window.fill('#alarmOptionsMessage', 'Take your medicine');
+    await window.click('#alarmOptionsSaveBtn');
+
+    const alarmRow = window.locator('.alarm-item:has-text("06:31:00")');
+    await expect(alarmRow).toContainText('2099-12-31');
+    await expect(window.locator('#newHour')).toHaveValue('00');
+    await expect(window.locator('#newMinute')).toHaveValue('00');
+    await expect(window.locator('#newSecond')).toHaveValue('00');
+    await expect(window.locator('#newRecurring')).not.toBeChecked();
+    await alarmRow.locator('.btn-options').click();
+    await expect(window.locator('#alarmOptionsHour')).toHaveValue('06');
+    await expect(window.locator('#alarmOptionsMinute')).toHaveValue('31');
+    await expect(window.locator('#alarmOptionsMessage')).toHaveValue('Take your medicine');
+    await window.fill('#alarmOptionsMessage', 'Call home');
+    await window.locator('#alarmOptionsRecurring').check();
+    await window.click('#alarmOptionsSaveBtn');
+    await expect.poll(() => {
+      const settings = JSON.parse(fs.readFileSync(path.join(__dirname, '../../dist/settings.json'), 'utf8'));
+      return settings.alarms.find((alarm: { hour: number; minute: number }) => alarm.hour === 6 && alarm.minute === 31);
+    }).toMatchObject({ message: 'Call home', recurring: true });
+  });
+
   test('adds multiple alarms', async () => {
     // Add the first alarm.
     await window.fill('#newHour', '08');
@@ -158,10 +190,10 @@ test.describe('Alarm Application', () => {
     
     // Check that the edit fields appear.
     // Find the fields in the alarm being edited.
-    const editingItem = window.locator('.alarm-item.editing');
-    const hourInput = editingItem.locator('input.hour-input');
-    const minuteInput = editingItem.locator('input.minute-input');
-    const secondInput = editingItem.locator('input.second-input');
+    const editingItem = window.locator('.alarm-item--editing');
+    const hourInput = editingItem.locator('input.alarm-item__time-input--hour');
+    const minuteInput = editingItem.locator('input.alarm-item__time-input--minute');
+    const secondInput = editingItem.locator('input.alarm-item__time-input--second');
     
     await expect(hourInput).toBeVisible({ timeout: 5000 });
     await expect(minuteInput).toBeVisible({ timeout: 5000 });
@@ -194,10 +226,10 @@ test.describe('Alarm Application', () => {
     await alarmRow.locator('button:has-text("Edit")').click();
     await window.waitForTimeout(300);
 
-    const editingItem = window.locator('.alarm-item.editing');
-    await editingItem.locator('input.hour-input').fill('20');
-    await editingItem.locator('input.minute-input').fill('00');
-    await editingItem.locator('input.second-input').fill('00');
+    const editingItem = window.locator('.alarm-item--editing');
+    await editingItem.locator('input.alarm-item__time-input--hour').fill('20');
+    await editingItem.locator('input.alarm-item__time-input--minute').fill('00');
+    await editingItem.locator('input.alarm-item__time-input--second').fill('00');
 
     await editingItem.locator('button:has-text("Cancel")').click();
     await window.waitForTimeout(500);
@@ -255,8 +287,7 @@ test.describe('Alarm Application', () => {
     
     // Disable the alarm by clicking its label.
     // Select the first label, which controls whether the alarm is enabled.
-    const toggleLabel = alarmItem.locator('label.alarm-toggle').first();
-    await toggleLabel.click();
+    await toggle.uncheck();
     await window.waitForTimeout(1000);
     
     // Check that the toggle updated.
@@ -265,7 +296,7 @@ test.describe('Alarm Application', () => {
     await expect(toggleAfter).not.toBeChecked();
     
     // Enable the alarm again.
-    await toggleLabel.click();
+    await toggleAfter.check();
     await window.waitForTimeout(1000);
     const toggleAfter2 = alarmItem.locator('input[type="checkbox"]').first();
     await expect(toggleAfter2).toBeChecked();

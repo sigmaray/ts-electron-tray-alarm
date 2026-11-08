@@ -4,505 +4,182 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Alarm Clock</title>
+    <link rel="stylesheet" href="../node_modules/bootstrap/dist/css/bootstrap.min.css">
     <style>
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-            margin: 0;
-            background: linear-gradient(135deg, #5b7fa6 0%, #4a6fa5 100%);
-            color: white;
             min-height: 100vh;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: flex-start;
-            padding: 20px;
         }
-        .container {
+        .alarm-app {
+            max-width: 640px;
+        }
+        .alarm-form__time-input {
+            flex: 0 0 5.5rem !important;
             text-align: center;
-            max-width: 600px;
-            width: 100%;
-        }
-        h1 {
-            font-size: 2.5em;
-            margin-bottom: 8px;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
-        }
-        .current-time-tz {
-            font-size: 1.1em;
-            color: rgba(255, 255, 255, 0.95);
-            margin-bottom: 24px;
             font-variant-numeric: tabular-nums;
         }
-        .add-alarm-section {
-            background: rgba(255, 255, 255, 0.15);
-            padding: 25px;
-            border-radius: 15px;
-            backdrop-filter: blur(10px);
-            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
-            margin-bottom: 30px;
-        }
-        .time-input-group {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 10px;
-            margin-bottom: 20px;
-        }
-        .time-input {
-            padding: 12px 20px;
-            font-size: 1.5em;
-            border: none;
-            border-radius: 8px;
-            background: rgba(255, 255, 255, 0.9);
-            color: #333;
-            width: 80px;
-            text-align: center;
-            font-weight: bold;
-        }
-        .time-input:focus {
-            outline: 3px solid rgba(255, 255, 255, 0.5);
-            background: white;
-        }
-        .time-separator {
-            font-size: 1.5em;
-            font-weight: bold;
-        }
-        .alarms-section {
-            background: rgba(255, 255, 255, 0.15);
-            padding: 25px;
-            border-radius: 15px;
-            backdrop-filter: blur(10px);
-            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
-            margin-bottom: 20px;
-        }
-        .alarms-list {
-            min-height: 100px;
-        }
-        .alarm-item {
-            background: rgba(255, 255, 255, 0.2);
-            padding: 15px;
-            border-radius: 10px;
-            margin-bottom: 10px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            flex-wrap: wrap;
-            gap: 10px;
-        }
-        .alarm-item.editing {
-            flex-direction: column;
-            align-items: stretch;
-        }
-        .alarm-info {
-            display: flex;
-            align-items: center;
-            gap: 15px;
-            flex: 1;
-        }
-        .alarm-time-group {
-            display: flex;
-            flex-direction: column;
-            gap: 4px;
-        }
-        .alarm-time {
-            font-size: 1.8em;
-            font-weight: bold;
+        .alarm-item__time-value {
             font-variant-numeric: tabular-nums;
-            min-width: 80px;
         }
-        .alarm-time-until {
-            font-size: 0.85em;
-            color: rgba(255, 255, 255, 0.8);
-            font-weight: normal;
-        }
-        .alarm-time-input {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            justify-content: center;
-        }
-        .alarm-time-input input {
-            padding: 8px 12px;
-            font-size: 1.2em;
-            border: none;
-            border-radius: 6px;
-            background: rgba(255, 255, 255, 0.9);
-            color: #333;
-            width: 60px;
+        .alarm-item__time-input {
+            flex: 0 0 4.5rem !important;
             text-align: center;
+            font-variant-numeric: tabular-nums;
         }
-        .alarm-time-input input:focus {
-            outline: 2px solid rgba(255, 255, 255, 0.5);
-            background: white;
-        }
-        .alarm-toggle {
-            position: relative;
-            display: inline-block;
-            width: 50px;
-            height: 26px;
-        }
-        .alarm-toggle input {
-            opacity: 0;
-            width: 0;
-            height: 0;
-        }
-        .toggle-slider {
-            position: absolute;
-            cursor: pointer;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background-color: rgba(255, 255, 255, 0.3);
-            transition: 0.3s;
-            border-radius: 26px;
-        }
-        .toggle-slider:before {
-            position: absolute;
-            content: "";
-            height: 20px;
-            width: 20px;
-            left: 3px;
-            bottom: 3px;
-            background-color: white;
-            transition: 0.3s;
-            border-radius: 50%;
-        }
-        .alarm-toggle input:checked + .toggle-slider {
-            background-color: #4CAF50;
-        }
-        .alarm-toggle input:checked + .toggle-slider:before {
-            transform: translateX(24px);
-        }
-        .alarm-toggles {
-            display: flex;
-            align-items: center;
-            gap: 25px;
-            flex-wrap: wrap;
-        }
-        .toggle-group {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 5px;
-        }
-        .alarm-toggle.with-label {
-            display: inline-block;
-            width: 50px;
-        }
-        .recurring-toggle {
-            display: inline-block;
-            width: 50px;
-        }
-        .toggle-label {
-            font-size: 0.8em;
-            color: rgba(255, 255, 255, 0.9);
-            white-space: nowrap;
-            font-weight: 500;
-            text-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+        .alarm-options__time-input {
+            flex: 0 0 5rem !important;
             text-align: center;
-        }
-        .recurring-toggle-group {
-            display: flex;
-            justify-content: center;
-            margin-bottom: 15px;
-        }
-        .recurring-toggle-group .toggle-group {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 5px;
-        }
-        .recurring-toggle-group .alarm-toggle {
-            display: inline-block;
-            width: 50px;
-        }
-        .alarm-recurring-edit {
-            display: flex;
-            justify-content: center;
-            margin: 15px 0;
+            font-variant-numeric: tabular-nums;
         }
         .alarm-actions {
             display: flex;
-            gap: 10px;
-        }
-        button {
-            padding: 10px 20px;
-            font-size: 1em;
-            font-weight: 600;
-            border: none;
-            border-radius: 8px;
-            background: rgba(255, 255, 255, 0.9);
-            color: #5b7fa6;
-            cursor: pointer;
-            transition: all 0.3s ease;
-        }
-        button:hover {
-            background: white;
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
-        }
-        button:active {
-            transform: translateY(0);
-        }
-        .btn-add {
-            background: rgba(76, 175, 80, 0.9) !important;
-            color: white !important;
-            font-size: 1.1em;
-            padding: 12px 30px;
-        }
-        .btn-add:hover {
-            background: rgba(76, 175, 80, 1) !important;
-        }
-        .btn-edit {
-            background: rgba(33, 150, 243, 0.9) !important;
-            color: white !important;
-        }
-        .btn-edit:hover {
-            background: rgba(33, 150, 243, 1) !important;
-        }
-        .btn-delete {
-            background: rgba(244, 67, 54, 0.9) !important;
-            color: white !important;
-        }
-        .btn-delete:hover {
-            background: rgba(244, 67, 54, 1) !important;
-        }
-        .btn-save {
-            background: rgba(76, 175, 80, 0.9) !important;
-            color: white !important;
-        }
-        .btn-save:hover {
-            background: rgba(76, 175, 80, 1) !important;
-        }
-        .btn-cancel {
-            background: rgba(158, 158, 158, 0.9) !important;
-            color: white !important;
-        }
-        .btn-cancel:hover {
-            background: rgba(158, 158, 158, 1) !important;
-        }
-        .no-alarms {
-            text-align: center;
-            padding: 40px;
-            color: rgba(255, 255, 255, 0.7);
-            font-style: italic;
-        }
-        .app-controls {
-            display: flex;
-            gap: 10px;
-            justify-content: center;
-            margin-top: 20px;
-        }
-        .close-btn {
-            background: rgba(255, 100, 100, 0.9) !important;
-            color: white !important;
-        }
-        .close-btn:hover {
-            background: rgba(255, 80, 80, 1) !important;
-        }
-        .info {
-            background: rgba(255, 255, 255, 0.1);
-            padding: 20px;
-            border-radius: 10px;
-            margin-top: 20px;
-            backdrop-filter: blur(10px);
-            font-size: 0.9em;
-            text-align: left;
-        }
-        .info p {
-            margin: 8px 0;
-        }
-        .dismiss-btn {
-            background: rgba(244, 67, 54, 0.9) !important;
-            color: white !important;
-            margin: 20px auto;
-            display: block;
-            font-size: 1.1em;
-            padding: 15px 30px;
-        }
-        .dismiss-btn:hover {
-            background: rgba(244, 67, 54, 1) !important;
-        }
-        .quick-time-links {
-            display: flex;
             flex-wrap: wrap;
+            gap: .5rem;
+        }
+        .alarm-actions--centered {
             justify-content: center;
-            gap: 10px;
-            margin-bottom: 15px;
         }
-        .quick-time-link {
-            padding: 6px 12px;
-            font-size: 0.9em;
-            font-weight: 500;
-            border: 1px solid rgba(255, 255, 255, 0.3);
-            border-radius: 6px;
-            background: rgba(255, 255, 255, 0.1);
-            color: white;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            text-decoration: none;
-            display: inline-block;
-        }
-        .quick-time-link:hover {
-            background: rgba(255, 255, 255, 0.25);
-            border-color: rgba(255, 255, 255, 0.5);
-            transform: translateY(-1px);
-        }
-        .quick-time-link:active {
-            transform: translateY(0);
-        }
-        .timezone-modal-overlay {
+        .modal-overlay {
             display: none;
             position: fixed;
             inset: 0;
-            background: rgba(0, 0, 0, 0.5);
-            z-index: 100;
-            align-items: center;
-            justify-content: center;
-            padding: 20px;
-        }
-        .timezone-modal-overlay.visible {
-            display: flex;
-        }
-        .timezone-modal {
-            background: linear-gradient(135deg, #5b7fa6 0%, #4a6fa5 100%);
-            border-radius: 15px;
-            padding: 24px;
-            max-width: 480px;
-            width: 100%;
-            max-height: 80vh;
-            display: flex;
-            flex-direction: column;
-            box-shadow: 0 8px 32px rgba(0,0,0,0.3);
-        }
-        .timezone-modal h2 {
-            margin: 0 0 12px 0;
-            font-size: 1.4em;
-        }
-        .timezone-modal .current-tz {
-            font-size: 0.9em;
-            color: rgba(255,255,255,0.9);
-            margin-bottom: 12px;
-        }
-        .timezone-modal input[type="text"] {
-            padding: 10px 14px;
-            font-size: 1em;
-            border: none;
-            border-radius: 8px;
-            margin-bottom: 12px;
-            width: 100%;
-            box-sizing: border-box;
-        }
-        .timezone-modal .tz-list {
-            flex: 1;
-            min-height: 200px;
-            max-height: 320px;
+            z-index: 1055;
+            overflow-x: hidden;
             overflow-y: auto;
-            background: rgba(255,255,255,0.15);
-            border-radius: 8px;
-            padding: 8px;
+            background: rgba(0, 0, 0, .5);
         }
-        .timezone-modal .tz-option {
-            padding: 8px 12px;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 0.95em;
-        }
-        .timezone-modal .tz-option:hover {
-            background: rgba(255,255,255,0.2);
-        }
-        .timezone-modal .tz-option.selected {
-            background: rgba(255,255,255,0.35);
-            font-weight: 600;
-        }
-        .timezone-modal .tz-option.system {
-            color: rgba(255,255,255,0.95);
-            border-bottom: 1px solid rgba(255,255,255,0.2);
-            margin-bottom: 4px;
-        }
-        .timezone-modal .modal-actions {
-            display: flex;
-            gap: 10px;
-            justify-content: flex-end;
-            margin-top: 16px;
+        .modal-overlay--visible {
+            display: block;
+            opacity: 1;
+            pointer-events: auto;
         }
     </style>
 </head>
-<body>
-    <div class="container">
-        <h1>⏰ Alarm Clock</h1>
-        <p class="current-time-tz" id="currentTimeTimezone">—</p>
+<body class="bg-body-tertiary">
+    <main class="alarm-app container py-4">
+        <h1 class="display-5 fw-bold text-primary text-center">⏰ Alarm Clock</h1>
+        <p class="alarm-app__timezone text-secondary text-center" id="currentTimeTimezone">—</p>
 
-        <div class="add-alarm-section">
-            <h2 style="margin-top: 0;">Add Alarm</h2>
-            <div class="time-input-group">
-                <input type="number" id="newHour" class="time-input" min="0" max="23" value="00" placeholder="00">
-                <span class="time-separator">:</span>
-                <input type="number" id="newMinute" class="time-input" min="0" max="59" value="00" placeholder="00">
-                <span class="time-separator">:</span>
-                <input type="number" id="newSecond" class="time-input" min="0" max="59" value="00" placeholder="00">
+        <section class="alarm-form card shadow mb-4">
+            <div class="card-header bg-primary text-white">
+                <h2 class="alarm-form__title h5 mb-0">Add Alarm</h2>
             </div>
-            <div class="quick-time-links">
-                <a href="#" class="quick-time-link" onclick="setQuickTimeSeconds(30); return false;">in 30 seconds</a>
-                <a href="#" class="quick-time-link" onclick="setQuickTimeSeconds(60); return false;">in 1 minute</a>
-                <a href="#" class="quick-time-link" onclick="setQuickTime(2); return false;">in 2 minutes</a>
-                <a href="#" class="quick-time-link" onclick="setQuickTime(5); return false;">in 5 minutes</a>
-                <a href="#" class="quick-time-link" onclick="setQuickTime(30); return false;">in 30 minutes</a>
-                <a href="#" class="quick-time-link" onclick="setQuickTime(60); return false;">in 1 hour</a>
-                <a href="#" class="quick-time-link" onclick="setQuickTime(120); return false;">in 2 hours</a>
+            <div class="card-body">
+            <div class="alarm-form__time input-group input-group-lg justify-content-center mb-3">
+                <input type="number" id="newHour" class="alarm-form__time-input form-control" min="0" max="23" value="00" placeholder="00">
+                <span class="alarm-form__separator input-group-text">:</span>
+                <input type="number" id="newMinute" class="alarm-form__time-input form-control" min="0" max="59" value="00" placeholder="00">
+                <span class="alarm-form__separator input-group-text">:</span>
+                <input type="number" id="newSecond" class="alarm-form__time-input form-control" min="0" max="59" value="00" placeholder="00">
             </div>
-            <div class="recurring-toggle-group">
-                <div class="toggle-group">
-                    <label class="alarm-toggle recurring-toggle">
-                        <input type="checkbox" id="newRecurring">
-                        <span class="toggle-slider"></span>
-                    </label>
-                    <span class="toggle-label">Repeat daily</span>
+            <div class="quick-time d-flex flex-wrap justify-content-center gap-2 mb-3">
+                <a href="#" class="quick-time__link btn btn-sm btn-outline-primary" onclick="setQuickTimeSeconds(30); return false;">in 30 seconds</a>
+                <a href="#" class="quick-time__link btn btn-sm btn-outline-primary" onclick="setQuickTimeSeconds(60); return false;">in 1 minute</a>
+                <a href="#" class="quick-time__link btn btn-sm btn-outline-primary" onclick="setQuickTime(2); return false;">in 2 minutes</a>
+                <a href="#" class="quick-time__link btn btn-sm btn-outline-primary" onclick="setQuickTime(30); return false;">in 30 minutes</a>
+                <a href="#" class="quick-time__link btn btn-sm btn-outline-primary" onclick="setQuickTime(60); return false;">in 1 hour</a>
+                <a href="#" class="quick-time__link btn btn-sm btn-outline-primary" onclick="setQuickTime(120); return false;">in 2 hours</a>
+            </div>
+            <div class="alarm-form__recurring form-check form-switch d-flex justify-content-center gap-2 mb-3">
+                <input type="checkbox" id="newRecurring" class="form-check-input">
+                <label class="form-check-label" for="newRecurring">Repeat daily</label>
+            </div>
+            <div class="alarm-actions alarm-actions--centered d-flex justify-content-center gap-2">
+                <button id="addAlarmBtn" class="alarm-actions__submit btn btn-primary">Add Alarm</button>
+                <button id="newAlarmOptionsBtn" class="alarm-actions__options btn btn-outline-secondary" aria-label="More alarm options" title="More options">...</button>
+            </div>
+            </div>
+        </section>
+
+        <section class="alarm-list card shadow mb-4">
+            <div class="card-header bg-primary text-white">
+                <h2 class="alarm-list__title h5 mb-0">Alarms</h2>
+            </div>
+            <div class="card-body p-0">
+            <div id="alarmsList" class="alarm-list__items list-group list-group-flush">
+                <div class="alarm-list__empty list-group-item text-center text-secondary">No alarms set</div>
+            </div>
+            </div>
+        </section>
+
+        <button id="dismissAlarmBtn" class="alarm-app__dismiss btn btn-danger" style="display: none;">Dismiss Alarm</button>
+
+        <div class="app-controls d-flex flex-wrap justify-content-center gap-2 mt-3">
+            <button id="timezoneBtn" class="btn btn-secondary">Set Time Zone</button>
+            <button id="countdownWindowBtn" class="btn btn-secondary">Show Countdown Window</button>
+            <button id="minimizeBtn" class="btn btn-secondary">Minimize to Tray</button>
+            <button id="closeBtn" class="app-controls__button--close btn btn-danger">Close</button>
+        </div>
+
+        <div id="timezoneModalOverlay" class="modal fade modal-overlay" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="timezoneModalTitle">
+            <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h2 class="timezone-picker__title modal-title fs-5" id="timezoneModalTitle">Select Time Zone</h2>
+                    </div>
+                    <div class="modal-body timezone-picker">
+                        <p class="timezone-picker__current" id="timezoneCurrentLabel">Current: System Default</p>
+                        <label class="form-label" for="timezoneList">Time zone</label>
+                        <select id="timezoneList" class="form-select timezone-picker__select"></select>
+                    </div>
+                    <div class="modal-footer">
+                        <button id="timezoneCancelBtn" class="btn btn-secondary">Cancel</button>
+                        <button id="timezoneSaveBtn" class="btn btn-primary">Save</button>
+                    </div>
                 </div>
             </div>
-            <button id="addAlarmBtn" class="btn-add">Add Alarm</button>
         </div>
 
-        <div class="alarms-section">
-            <h2 style="margin-top: 0;">Alarms</h2>
-            <div id="alarmsList" class="alarms-list">
-                <div class="no-alarms">No alarms set</div>
-            </div>
-        </div>
-
-        <button id="dismissAlarmBtn" class="dismiss-btn" style="display: none;">Dismiss Alarm</button>
-
-        <div class="app-controls">
-            <button id="timezoneBtn">Set Time Zone</button>
-            <button id="countdownWindowBtn">Show Countdown Window</button>
-            <button id="minimizeBtn">Minimize to Tray</button>
-            <button id="closeBtn" class="close-btn">Close</button>
-        </div>
-
-        <div id="timezoneModalOverlay" class="timezone-modal-overlay">
-            <div class="timezone-modal">
-                <h2>Select Time Zone</h2>
-                <p class="current-tz" id="timezoneCurrentLabel">Current: System Default</p>
-                <input type="text" id="timezoneSearch" placeholder="Search time zones...">
-                <div class="tz-list" id="timezoneList"></div>
-                <div class="modal-actions">
-                    <button id="timezoneCancelBtn" class="btn-cancel">Cancel</button>
-                    <button id="timezoneSaveBtn" class="btn-save">Save</button>
+        <div id="alarmOptionsOverlay" class="modal fade modal-overlay" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="alarmOptionsTitle">
+            <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+                <div class="modal-content alarm-options">
+                    <div class="modal-header">
+                        <h2 class="modal-title fs-5" id="alarmOptionsTitle">Alarm options</h2>
+                    </div>
+                    <div class="modal-body">
+                <label class="alarm-options__label form-label" for="alarmOptionsHour">Time</label>
+                <div class="alarm-options__time input-group mb-3">
+                    <input type="number" id="alarmOptionsHour" class="alarm-options__time-input form-control" min="0" max="23" aria-label="Hour">
+                    <span class="alarm-options__separator input-group-text">:</span>
+                    <input type="number" id="alarmOptionsMinute" class="alarm-options__time-input form-control" min="0" max="59" aria-label="Minute">
+                    <span class="alarm-options__separator input-group-text">:</span>
+                    <input type="number" id="alarmOptionsSecond" class="alarm-options__time-input form-control" min="0" max="59" aria-label="Second">
+                </div>
+                <div class="quick-time d-flex flex-wrap justify-content-center gap-2 mb-3">
+                    <a href="#" class="quick-time__link btn btn-sm btn-outline-secondary" data-options-seconds="30">in 30 seconds</a>
+                    <a href="#" class="quick-time__link btn btn-sm btn-outline-secondary" data-options-seconds="60">in 1 minute</a>
+                    <a href="#" class="quick-time__link btn btn-sm btn-outline-secondary" data-options-minutes="2">in 2 minutes</a>
+                    <a href="#" class="quick-time__link btn btn-sm btn-outline-secondary" data-options-minutes="5">in 5 minutes</a>
+                    <a href="#" class="quick-time__link btn btn-sm btn-outline-secondary" data-options-minutes="30">in 30 minutes</a>
+                    <a href="#" class="quick-time__link btn btn-sm btn-outline-secondary" data-options-minutes="60">in 1 hour</a>
+                    <a href="#" class="quick-time__link btn btn-sm btn-outline-secondary" data-options-minutes="120">in 2 hours</a>
+                </div>
+                <div class="alarm-options__recurring form-check form-switch mb-3">
+                    <input type="checkbox" id="alarmOptionsRecurring" class="form-check-input">
+                    <label class="form-check-label" for="alarmOptionsRecurring">Repeat daily</label>
+                </div>
+                <label class="alarm-options__label form-label" for="alarmOptionsDate">Date (optional)</label>
+                <input type="date" id="alarmOptionsDate" class="form-control mb-3">
+                <label class="alarm-options__label form-label" for="alarmOptionsMessage">Notification text (optional)</label>
+                <textarea id="alarmOptionsMessage" class="form-control" rows="3" maxlength="500" placeholder="Shown when the alarm goes off"></textarea>
+                    </div>
+                    <div class="modal-footer">
+                        <button id="alarmOptionsCancelBtn" class="btn btn-secondary">Cancel</button>
+                        <button id="alarmOptionsSaveBtn" class="btn btn-primary">Save</button>
+                    </div>
                 </div>
             </div>
         </div>
 
-        <div class="info">
-            <p><strong>Instructions:</strong></p>
-            <p>• Set the time in 24-hour format (00:00:00–23:59:59)</p>
-            <p>• Add as many alarms as you need</p>
-            <p>• Use the toggle to enable or disable an alarm</p>
-            <p>• Select "Edit" to change an alarm time</p>
-            <p>• The system tray shows the time remaining until the next alarm</p>
-            <p>• Minimize the app to the system tray to keep alarms running</p>
+        <div class="app-info alert alert-info mt-4" role="note">
+            <p class="app-info__paragraph"><strong>Instructions:</strong></p>
+            <p class="app-info__paragraph">• Set the time in 24-hour format (00:00:00–23:59:59)</p>
+            <p class="app-info__paragraph">• Add as many alarms as you need</p>
+            <p class="app-info__paragraph">• Use the toggle to enable or disable an alarm</p>
+            <p class="app-info__paragraph">• Select "Edit" to change an alarm time</p>
+            <p class="app-info__paragraph">• The system tray shows the time remaining until the next alarm</p>
+            <p class="app-info__paragraph">• Minimize the app to the system tray to keep alarms running</p>
         </div>
-    </div>
+    </main>
 
     <script src="time.js"></script>
     <script src="renderer.js"></script>

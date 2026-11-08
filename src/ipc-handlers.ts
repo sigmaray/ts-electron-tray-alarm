@@ -1,6 +1,6 @@
 import { app, ipcMain, IpcMain } from 'electron';
 import { Alarm, isValidAlarmPayload, normalizeTimeZone } from './settings';
-import { alarmTimeHasPassedToday, nextAlarmTimestamp } from './time.js';
+import { alarmTimeHasPassedToday, localDateTimeInTimezone, nextAlarmTimestamp, zonedDateTimeToTimestamp } from './time.js';
 
 export interface IpcDependencies {
   getAlarms(): Alarm[];
@@ -81,6 +81,18 @@ function scheduleAlarm(alarm: Alarm, deps: IpcDependencies): Alarm {
   const scheduled = { ...alarm };
   if (!scheduled.enabled) {
     delete scheduled.scheduledAt;
+  } else if (scheduled.scheduledAt === undefined && scheduled.scheduledDate) {
+    const [year, month, day] = scheduled.scheduledDate.split('-').map(Number);
+    const target = zonedDateTimeToTimestamp(deps.getEffectiveTimezone(), {
+      year, month, day, hour: scheduled.hour, minute: scheduled.minute, second: scheduled.second,
+    });
+    if (target > Date.now()) {
+      scheduled.scheduledAt = target;
+    } else {
+      scheduled.scheduledAt = nextAlarmTimestamp(deps.getEffectiveTimezone(), scheduled, Date.now());
+      const next = localDateTimeInTimezone(deps.getEffectiveTimezone(), scheduled.scheduledAt);
+      scheduled.scheduledDate = `${next.year}-${String(next.month).padStart(2, '0')}-${String(next.day).padStart(2, '0')}`;
+    }
   } else if (scheduled.scheduledAt === undefined
     && alarmTimeHasPassedToday(deps.getEffectiveTimezone(), scheduled, Date.now())) {
     scheduled.scheduledAt = nextAlarmTimestamp(deps.getEffectiveTimezone(), scheduled, Date.now());

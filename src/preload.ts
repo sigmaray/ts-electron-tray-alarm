@@ -8,6 +8,8 @@ export interface Alarm {
   enabled: boolean;
   recurring: boolean;
   scheduledAt?: number;
+  scheduledDate?: string;
+  message?: string;
 }
 
 // Expose a safe API to the renderer process

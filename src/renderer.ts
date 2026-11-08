@@ -7,6 +7,8 @@ interface Alarm {
   enabled: boolean;
   recurring: boolean;
   scheduledAt?: number;
+  scheduledDate?: string;
+  message?: string;
 }
 
 interface ElectronAPI {
@@ -42,6 +44,9 @@ let currentTimezoneInfo: { effective: string; isSystem: boolean } | null = null;
 let timeTimezoneInterval: ReturnType<typeof setInterval> | null = null;
 let pendingNewAlarmScheduledAt: number | undefined;
 let pendingEditScheduledAt: number | undefined;
+let pendingNewAlarmDate: string | undefined;
+let pendingNewAlarmMessage = '';
+let optionsAlarmId: string | null = null;
 const alarmTime = (window as any).AlarmTime;
 
 function updateTimeTimezoneDisplay(): void {
@@ -71,6 +76,111 @@ function formatTime(hour: number, minute: number, second: number): string {
 function getLocalTimeFromTimestamp(tz: string, timestamp: number): { hour: number; minute: number; second: number } {
   const local = alarmTime.localDateTimeInTimezone(tz, timestamp);
   return { hour: local.hour, minute: local.minute, second: local.second };
+}
+
+function dateInTimezone(tz: string, timestamp: number): string {
+  const local = alarmTime.localDateTimeInTimezone(tz, timestamp);
+  return `${local.year}-${String(local.month).padStart(2, '0')}-${String(local.day).padStart(2, '0')}`;
+}
+
+function openAlarmOptions(alarmId?: string): void {
+  const overlay = document.getElementById('alarmOptionsOverlay');
+  const dateInput = document.getElementById('alarmOptionsDate') as HTMLInputElement | null;
+  const messageInput = document.getElementById('alarmOptionsMessage') as HTMLTextAreaElement | null;
+  const hourInput = document.getElementById('alarmOptionsHour') as HTMLInputElement | null;
+  const minuteInput = document.getElementById('alarmOptionsMinute') as HTMLInputElement | null;
+  const secondInput = document.getElementById('alarmOptionsSecond') as HTMLInputElement | null;
+  const recurringInput = document.getElementById('alarmOptionsRecurring') as HTMLInputElement | null;
+  if (!overlay || !dateInput || !messageInput || !hourInput || !minuteInput || !secondInput || !recurringInput) return;
+  optionsAlarmId = alarmId ?? null;
+  const tz = getEffectiveTimezoneForQuick();
+  if (alarmId) {
+    const alarm = alarms.find(item => item.id === alarmId);
+    if (!alarm) return;
+    const time = alarm.scheduledAt === undefined ? alarm : getLocalTimeFromTimestamp(tz, alarm.scheduledAt);
+    hourInput.value = String(time.hour).padStart(2, '0');
+    minuteInput.value = String(time.minute).padStart(2, '0');
+    secondInput.value = String(time.second).padStart(2, '0');
+    recurringInput.checked = alarm.recurring;
+    dateInput.value = alarm.scheduledDate ?? (alarm.scheduledAt === undefined ? '' : dateInTimezone(tz, alarm.scheduledAt));
+    messageInput.value = alarm.message ?? '';
+  } else {
+    hourInput.value = (document.getElementById('newHour') as HTMLInputElement).value;
+    minuteInput.value = (document.getElementById('newMinute') as HTMLInputElement).value;
+    secondInput.value = (document.getElementById('newSecond') as HTMLInputElement).value;
+    recurringInput.checked = (document.getElementById('newRecurring') as HTMLInputElement).checked;
+    dateInput.value = pendingNewAlarmDate ?? (pendingNewAlarmScheduledAt === undefined ? '' : dateInTimezone(tz, pendingNewAlarmScheduledAt));
+    messageInput.value = pendingNewAlarmMessage;
+  }
+  overlay.classList.add('modal-overlay--visible', 'show');
+  dateInput.focus();
+}
+
+function saveAlarmOptions(): void {
+  const overlay = document.getElementById('alarmOptionsOverlay');
+  const dateInput = document.getElementById('alarmOptionsDate') as HTMLInputElement | null;
+  const messageInput = document.getElementById('alarmOptionsMessage') as HTMLTextAreaElement | null;
+  const hourInput = document.getElementById('alarmOptionsHour') as HTMLInputElement | null;
+  const minuteInput = document.getElementById('alarmOptionsMinute') as HTMLInputElement | null;
+  const secondInput = document.getElementById('alarmOptionsSecond') as HTMLInputElement | null;
+  const recurringInput = document.getElementById('alarmOptionsRecurring') as HTMLInputElement | null;
+  if (!overlay || !dateInput || !messageInput || !hourInput || !minuteInput || !secondInput || !recurringInput) return;
+  const date = dateInput.value || undefined;
+  const message = messageInput.value.trim() || undefined;
+  const hour = Number(hourInput.value);
+  const minute = Number(minuteInput.value);
+  const second = Number(secondInput.value);
+  if (!Number.isInteger(hour) || hour < 0 || hour > 23) { alert('Enter a valid hour (0–23)'); return; }
+  if (!Number.isInteger(minute) || minute < 0 || minute > 59) { alert('Enter valid minutes (0–59)'); return; }
+  if (!Number.isInteger(second) || second < 0 || second > 59) { alert('Enter valid seconds (0–59)'); return; }
+  const alarm = optionsAlarmId ? alarms.find(item => item.id === optionsAlarmId) : undefined;
+  if (optionsAlarmId && !alarm) return;
+  if (hasAlarmAtTime(hour, minute, second, alarm?.id)) {
+    alert('An alarm is already set for this time!');
+    return;
+  }
+  let scheduledAt: number | undefined;
+  if (date) {
+    const [year, month, day] = date.split('-').map(Number);
+    const targetTimestamp = alarmTime.zonedDateTimeToTimestamp(getEffectiveTimezoneForQuick(), { year, month, day, hour, minute, second });
+    if (!Number.isFinite(targetTimestamp) || targetTimestamp <= Date.now()) {
+      alert('Choose a future date and time.');
+      return;
+    }
+    scheduledAt = targetTimestamp;
+  }
+  if (alarm) {
+    const electronAPI = (window as any).electronAPI as ElectronAPI | undefined;
+    electronAPI?.updateAlarm({ ...alarm, hour, minute, second, recurring: recurringInput.checked, scheduledDate: date, scheduledAt, message });
+  } else {
+    const electronAPI = (window as any).electronAPI as ElectronAPI | undefined;
+    electronAPI?.addAlarm({
+      id: generateAlarmId(),
+      hour,
+      minute,
+      second,
+      enabled: true,
+      recurring: recurringInput.checked,
+      scheduledAt,
+      scheduledDate: date,
+      message,
+    });
+    (document.getElementById('newHour') as HTMLInputElement).value = '00';
+    (document.getElementById('newMinute') as HTMLInputElement).value = '00';
+    (document.getElementById('newSecond') as HTMLInputElement).value = '00';
+    (document.getElementById('newRecurring') as HTMLInputElement).checked = false;
+    hourInput.value = '00';
+    minuteInput.value = '00';
+    secondInput.value = '00';
+    recurringInput.checked = false;
+    dateInput.value = '';
+    messageInput.value = '';
+    pendingNewAlarmScheduledAt = undefined;
+    pendingNewAlarmDate = undefined;
+    pendingNewAlarmMessage = '';
+  }
+  overlay.classList.remove('modal-overlay--visible', 'show');
+  optionsAlarmId = null;
 }
 
 function getTimeUntilAlarm(alarm: Alarm): number {
@@ -114,7 +224,7 @@ function updateTimeUntilForAlarms(): void {
     const alarmItem = document.querySelector(`.alarm-item[data-id="${alarm.id}"]`);
     if (!alarmItem) return;
     
-    const timeUntilElement = alarmItem.querySelector('.alarm-time-until');
+    const timeUntilElement = alarmItem.querySelector('.alarm-item__countdown');
     if (alarm.enabled) {
       const timeUntil = getTimeUntilAlarm(alarm);
       const timeUntilStr = formatTimeUntil(timeUntil);
@@ -123,10 +233,10 @@ function updateTimeUntilForAlarms(): void {
         timeUntilElement.textContent = timeUntilStr;
       } else {
         // Add the countdown element if the alarm is enabled and it is missing
-        const timeGroup = alarmItem.querySelector('.alarm-time-group');
+        const timeGroup = alarmItem.querySelector('.alarm-item__time');
         if (timeGroup) {
           const timeUntilSpan = document.createElement('span');
-          timeUntilSpan.className = 'alarm-time-until';
+          timeUntilSpan.className = 'alarm-item__countdown';
           timeUntilSpan.textContent = timeUntilStr;
           timeGroup.appendChild(timeUntilSpan);
         }
@@ -208,7 +318,7 @@ function renderAlarms(): void {
   }
 
   if (alarms.length === 0) {
-    container.innerHTML = '<div class="no-alarms">No alarms set</div>';
+    container.innerHTML = '<div class="alarm-list__empty list-group-item text-center text-secondary">No alarms set</div>';
     return;
   }
 
@@ -228,6 +338,9 @@ function renderAlarms(): void {
     const displayMinute = scheduledLocalTime?.minute ?? alarm.minute;
     const displaySecond = scheduledLocalTime?.second ?? alarm.second;
     const timeStr = formatTime(displayHour, displayMinute, displaySecond);
+    const dateTimestamp = alarm.scheduledAt ?? alarmTime.nextAlarmTimestamp(currentTimezoneInfo?.effective ?? Intl.DateTimeFormat().resolvedOptions().timeZone, alarm, Date.now());
+    const dateLocal = alarmTime.localDateTimeInTimezone(currentTimezoneInfo?.effective ?? Intl.DateTimeFormat().resolvedOptions().timeZone, dateTimestamp);
+    const dateStr = `${dateLocal.year}-${String(dateLocal.month).padStart(2, '0')}-${String(dateLocal.day).padStart(2, '0')}`;
     
     if (isEditing) {
       // Use saved field values when available, otherwise use the alarm values
@@ -236,26 +349,26 @@ function renderAlarms(): void {
       const secondValue = editingValues ? editingValues.second : displaySecond;
       
       return `
-        <div class="alarm-item editing" data-id="${alarm.id}">
-          <div class="alarm-time-input">
-            <input type="number" min="0" max="23" value="${hourValue}" class="hour-input" id="edit-hour-${alarm.id}">
-            <span>:</span>
-            <input type="number" min="0" max="59" value="${minuteValue}" class="minute-input" id="edit-minute-${alarm.id}">
-            <span>:</span>
-            <input type="number" min="0" max="59" value="${secondValue}" class="second-input" id="edit-second-${alarm.id}">
+        <div class="alarm-item alarm-item--editing list-group-item d-flex flex-column align-items-stretch gap-3" data-id="${alarm.id}">
+          <div class="alarm-item__time-editor input-group input-group-sm justify-content-center">
+            <input type="number" min="0" max="23" value="${hourValue}" class="alarm-item__time-input alarm-item__time-input--hour form-control" id="edit-hour-${alarm.id}">
+            <span class="alarm-item__time-separator input-group-text">:</span>
+            <input type="number" min="0" max="59" value="${minuteValue}" class="alarm-item__time-input alarm-item__time-input--minute form-control" id="edit-minute-${alarm.id}">
+            <span class="alarm-item__time-separator input-group-text">:</span>
+            <input type="number" min="0" max="59" value="${secondValue}" class="alarm-item__time-input alarm-item__time-input--second form-control" id="edit-second-${alarm.id}">
           </div>
-          <div class="quick-time-links">
-            <a href="#" class="quick-time-link" onclick="setQuickTimeSecondsForEdit('${alarm.id}', 30); return false;">in 30 seconds</a>
-            <a href="#" class="quick-time-link" onclick="setQuickTimeSecondsForEdit('${alarm.id}', 60); return false;">in 1 minute</a>
-            <a href="#" class="quick-time-link" onclick="setQuickTimeForEdit('${alarm.id}', 2); return false;">in 2 minutes</a>
-            <a href="#" class="quick-time-link" onclick="setQuickTimeForEdit('${alarm.id}', 5); return false;">in 5 minutes</a>
-            <a href="#" class="quick-time-link" onclick="setQuickTimeForEdit('${alarm.id}', 30); return false;">in 30 minutes</a>
-            <a href="#" class="quick-time-link" onclick="setQuickTimeForEdit('${alarm.id}', 60); return false;">in 1 hour</a>
-            <a href="#" class="quick-time-link" onclick="setQuickTimeForEdit('${alarm.id}', 120); return false;">in 2 hours</a>
+          <div class="quick-time d-flex flex-wrap justify-content-center gap-2">
+            <a href="#" class="quick-time__link btn btn-sm btn-outline-secondary" onclick="setQuickTimeSecondsForEdit('${alarm.id}', 30); return false;">in 30 seconds</a>
+            <a href="#" class="quick-time__link btn btn-sm btn-outline-secondary" onclick="setQuickTimeSecondsForEdit('${alarm.id}', 60); return false;">in 1 minute</a>
+            <a href="#" class="quick-time__link btn btn-sm btn-outline-secondary" onclick="setQuickTimeForEdit('${alarm.id}', 2); return false;">in 2 minutes</a>
+            <a href="#" class="quick-time__link btn btn-sm btn-outline-secondary" onclick="setQuickTimeForEdit('${alarm.id}', 5); return false;">in 5 minutes</a>
+            <a href="#" class="quick-time__link btn btn-sm btn-outline-secondary" onclick="setQuickTimeForEdit('${alarm.id}', 30); return false;">in 30 minutes</a>
+            <a href="#" class="quick-time__link btn btn-sm btn-outline-secondary" onclick="setQuickTimeForEdit('${alarm.id}', 60); return false;">in 1 hour</a>
+            <a href="#" class="quick-time__link btn btn-sm btn-outline-secondary" onclick="setQuickTimeForEdit('${alarm.id}', 120); return false;">in 2 hours</a>
           </div>
-          <div class="alarm-actions">
-            <button class="btn-save" onclick="saveAlarm('${alarm.id}')">Save</button>
-            <button class="btn-cancel" onclick="cancelEdit('${alarm.id}')">Cancel</button>
+          <div class="alarm-actions d-flex justify-content-end gap-2">
+            <button class="alarm-actions__button--save btn btn-success" onclick="saveAlarm('${alarm.id}')">Save</button>
+            <button class="alarm-actions__button--cancel btn btn-secondary" onclick="cancelEdit('${alarm.id}')">Cancel</button>
           </div>
         </div>
       `;
@@ -264,32 +377,28 @@ function renderAlarms(): void {
       const timeUntilStr = alarm.enabled ? formatTimeUntil(timeUntil) : '';
       
       return `
-        <div class="alarm-item" data-id="${alarm.id}">
-          <div class="alarm-info">
-            <div class="alarm-time-group">
-              <span class="alarm-time">${timeStr}</span>
-              ${alarm.enabled && timeUntilStr ? `<span class="alarm-time-until">${timeUntilStr}</span>` : ''}
+        <div class="alarm-item list-group-item d-flex flex-wrap justify-content-between align-items-center gap-3" data-id="${alarm.id}">
+          <div class="alarm-item__info d-flex flex-wrap align-items-center gap-3">
+            <div class="alarm-item__time d-flex flex-column">
+              <span class="alarm-item__time-value fs-3 fw-bold font-monospace">${timeStr}</span>
+              <span class="alarm-item__date badge text-bg-secondary align-self-start">${dateStr}</span>
+              ${alarm.enabled && timeUntilStr ? `<span class="alarm-item__countdown small text-body-secondary">${timeUntilStr}</span>` : ''}
             </div>
-            <div class="alarm-toggles">
-              <div class="toggle-group">
-                <label class="alarm-toggle with-label" title="Enable/disable alarm">
-                  <input type="checkbox" ${alarm.enabled ? 'checked' : ''} onchange="toggleAlarm('${alarm.id}', this.checked)">
-                  <span class="toggle-slider"></span>
-                </label>
-                <span class="toggle-label">On</span>
+            <div class="alarm-item__toggles d-flex flex-wrap gap-3">
+              <div class="alarm-item__toggle form-check form-switch">
+                  <input type="checkbox" class="form-check-input" id="enable-${alarm.id}" ${alarm.enabled ? 'checked' : ''} onchange="toggleAlarm('${alarm.id}', this.checked)">
+                  <label class="form-check-label" for="enable-${alarm.id}">On</label>
               </div>
-              <div class="toggle-group">
-                <label class="alarm-toggle recurring-toggle with-label" title="Recurring alarm">
-                  <input type="checkbox" ${alarm.recurring ? 'checked' : ''} onchange="toggleRecurring('${alarm.id}', this.checked)">
-                  <span class="toggle-slider"></span>
-                </label>
-                <span class="toggle-label">Repeat</span>
+              <div class="alarm-item__toggle form-check form-switch">
+                  <input type="checkbox" class="form-check-input" id="repeat-${alarm.id}" ${alarm.recurring ? 'checked' : ''} onchange="toggleRecurring('${alarm.id}', this.checked)">
+                  <label class="form-check-label" for="repeat-${alarm.id}">Repeat</label>
               </div>
             </div>
           </div>
-          <div class="alarm-actions">
-            <button class="btn-edit" onclick="editAlarm('${alarm.id}')">Edit</button>
-            <button class="btn-delete" onclick="deleteAlarm('${alarm.id}')">Delete</button>
+          <div class="alarm-actions d-flex gap-2">
+            <button class="alarm-actions__options btn btn-outline-secondary" aria-label="More options" onclick="openAlarmOptions('${alarm.id}')">...</button>
+            <button class="alarm-actions__button--edit btn btn-outline-primary" onclick="editAlarm('${alarm.id}')">Edit</button>
+            <button class="alarm-actions__button--delete btn btn-outline-danger" onclick="deleteAlarm('${alarm.id}')">Delete</button>
           </div>
         </div>
       `;
@@ -446,6 +555,8 @@ function addAlarm(): void {
     enabled: true,
     recurring,
     scheduledAt: pendingNewAlarmScheduledAt,
+    scheduledDate: pendingNewAlarmDate,
+    message: pendingNewAlarmMessage.trim() || undefined,
   };
 
   const electronAPI = (window as any).electronAPI as ElectronAPI | undefined;
@@ -461,6 +572,8 @@ function addAlarm(): void {
     recurringInput.checked = false;
   }
   pendingNewAlarmScheduledAt = undefined;
+  pendingNewAlarmDate = undefined;
+  pendingNewAlarmMessage = '';
 }
 
 function editAlarm(alarmId: string): void {
@@ -528,7 +641,12 @@ function saveAlarm(alarmId: string): void {
     hour,
     minute,
     second,
-    scheduledAt: pendingEditScheduledAt,
+    scheduledAt: alarm.scheduledDate
+      ? alarmTime.zonedDateTimeToTimestamp(getEffectiveTimezoneForQuick(), {
+          year: Number(alarm.scheduledDate.slice(0, 4)), month: Number(alarm.scheduledDate.slice(5, 7)), day: Number(alarm.scheduledDate.slice(8, 10)),
+          hour, minute, second,
+        })
+      : pendingEditScheduledAt,
     // Keep the recurring value unchanged
   };
 
@@ -678,7 +796,7 @@ function showAlarmNotification(alarm: Alarm): void {
   if (Notification.permission === 'granted') {
     const timeStr = formatTime(alarm.hour, alarm.minute, alarm.second);
     alarmNotification = new Notification('⏰ Alarm!', {
-      body: `Time: ${timeStr}`,
+      body: alarm.message?.trim() || `Time: ${timeStr}`,
       requireInteraction: true,
       tag: 'alarm-alert'
     });
@@ -732,7 +850,7 @@ function showAlarmNotification(alarm: Alarm): void {
   } else {
     // Show an alert if notifications are unavailable
     const timeStr = formatTime(alarm.hour, alarm.minute, alarm.second);
-    alert(`⏰ Alarm! Time: ${timeStr}`);
+    alert(alarm.message?.trim() || `⏰ Alarm! Time: ${timeStr}`);
     // Stop the sound and blinking after the alert closes
     dismissAlarm();
   }
@@ -743,6 +861,7 @@ function showAlarmNotification(alarm: Alarm): void {
 (window as any).editAlarm = editAlarm;
 (window as any).cancelEdit = cancelEdit;
 (window as any).saveAlarm = saveAlarm;
+(window as any).openAlarmOptions = openAlarmOptions;
 (window as any).deleteAlarm = deleteAlarm;
 (window as any).toggleAlarm = toggleAlarm;
 (window as any).toggleRecurring = toggleRecurring;
@@ -759,6 +878,31 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   const electronAPI = (window as any).electronAPI as ElectronAPI | undefined;
+  const optionsOverlay = document.getElementById('alarmOptionsOverlay');
+  document.getElementById('newAlarmOptionsBtn')?.addEventListener('click', () => openAlarmOptions());
+  document.getElementById('alarmOptionsSaveBtn')?.addEventListener('click', saveAlarmOptions);
+  document.querySelectorAll<HTMLAnchorElement>('[data-options-seconds], [data-options-minutes]').forEach(link => {
+    link.addEventListener('click', event => {
+      event.preventDefault();
+      const seconds = Number(link.dataset.optionsSeconds ?? Number(link.dataset.optionsMinutes) * 60);
+      const target = Date.now() + seconds * 1000;
+      const time = getLocalTimeFromTimestamp(getEffectiveTimezoneForQuick(), target);
+      (document.getElementById('alarmOptionsHour') as HTMLInputElement).value = String(time.hour).padStart(2, '0');
+      (document.getElementById('alarmOptionsMinute') as HTMLInputElement).value = String(time.minute).padStart(2, '0');
+      (document.getElementById('alarmOptionsSecond') as HTMLInputElement).value = String(time.second).padStart(2, '0');
+      (document.getElementById('alarmOptionsDate') as HTMLInputElement).value = dateInTimezone(getEffectiveTimezoneForQuick(), target);
+    });
+  });
+  document.getElementById('alarmOptionsCancelBtn')?.addEventListener('click', () => {
+    optionsOverlay?.classList.remove('modal-overlay--visible', 'show');
+    optionsAlarmId = null;
+  });
+  optionsOverlay?.addEventListener('click', event => {
+    if (event.target === optionsOverlay) {
+      optionsOverlay.classList.remove('modal-overlay--visible', 'show');
+      optionsAlarmId = null;
+    }
+  });
   if (electronAPI) {
     // Countdown window state
     electronAPI.onCountdownWindowState((visible: boolean) => {
@@ -920,8 +1064,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // Time zone selection dialog
   const timezoneBtn = document.getElementById('timezoneBtn');
   const timezoneModalOverlay = document.getElementById('timezoneModalOverlay');
-  const timezoneList = document.getElementById('timezoneList');
-  const timezoneSearch = document.getElementById('timezoneSearch') as HTMLInputElement;
+  const timezoneList = document.getElementById('timezoneList') as HTMLSelectElement | null;
   const timezoneCurrentLabel = document.getElementById('timezoneCurrentLabel');
   const timezoneSaveBtn = document.getElementById('timezoneSaveBtn');
   const timezoneCancelBtn = document.getElementById('timezoneCancelBtn');
@@ -929,34 +1072,14 @@ document.addEventListener('DOMContentLoaded', () => {
   let allTimezones: string[] = [];
   let selectedTimezoneValue: string | null = null;
 
-  function renderTimezoneList(filter: string): void {
+  function renderTimezoneOptions(): void {
     if (!timezoneList) return;
-    const q = (filter || '').toLowerCase().trim();
-    const filtered = q
-      ? allTimezones.filter(tz => tz.toLowerCase().includes(q))
+    timezoneList.replaceChildren(new Option('System time zone (default)', ''));
+    const timezones = selectedTimezoneValue && !allTimezones.includes(selectedTimezoneValue)
+      ? [...allTimezones, selectedTimezoneValue].sort()
       : allTimezones;
-    const systemLabel = 'System time zone (default)';
-    const selected = selectedTimezoneValue;
-    const systemSelected = selected === null ? ' selected' : '';
-    let html = `<div class="tz-option system${systemSelected}" data-tz="">${systemLabel}</div>`;
-    filtered.forEach(tz => {
-      const cls = tz === selected ? 'tz-option selected' : 'tz-option';
-      html += `<div class="${cls}" data-tz="${escapeHtml(tz)}">${escapeHtml(tz)}</div>`;
-    });
-    timezoneList.innerHTML = html;
-    timezoneList.querySelectorAll('.tz-option').forEach(el => {
-      el.addEventListener('click', () => {
-        selectedTimezoneValue = (el as HTMLElement).getAttribute('data-tz') || null;
-        if (selectedTimezoneValue === '') selectedTimezoneValue = null;
-        renderTimezoneList(timezoneSearch ? timezoneSearch.value : '');
-      });
-    });
-  }
-
-  function escapeHtml(s: string): string {
-    const div = document.createElement('div');
-    div.textContent = s;
-    return div.innerHTML;
+    timezones.forEach(timezone => timezoneList.add(new Option(timezone, timezone)));
+    timezoneList.value = selectedTimezoneValue ?? '';
   }
 
   if (timezoneBtn && timezoneModalOverlay && electronAPI) {
@@ -970,15 +1093,14 @@ document.addEventListener('DOMContentLoaded', () => {
         allTimezones = await electronAPI.getTimezones();
         allTimezones.sort();
       }
-      renderTimezoneList(timezoneSearch ? timezoneSearch.value : '');
-      timezoneModalOverlay.classList.add('visible');
-      timezoneSearch?.focus();
-    });
-  }
-
-  if (timezoneSearch) {
-    timezoneSearch.addEventListener('input', () => {
-      renderTimezoneList(timezoneSearch.value);
+      renderTimezoneOptions();
+      if (timezoneList) {
+        timezoneList.onchange = () => {
+          selectedTimezoneValue = timezoneList.value || null;
+        };
+      }
+      timezoneModalOverlay.classList.add('modal-overlay--visible', 'show');
+      timezoneList?.focus();
     });
   }
 
@@ -991,20 +1113,20 @@ document.addEventListener('DOMContentLoaded', () => {
       timezoneCurrentLabel!.textContent = isSystem
         ? `Current: System time zone (${effective})`
         : 'Current: ' + effective;
-      timezoneModalOverlay.classList.remove('visible');
+      timezoneModalOverlay.classList.remove('modal-overlay--visible', 'show');
     });
   }
 
   if (timezoneCancelBtn && timezoneModalOverlay) {
     timezoneCancelBtn.addEventListener('click', () => {
-      timezoneModalOverlay.classList.remove('visible');
+      timezoneModalOverlay.classList.remove('modal-overlay--visible', 'show');
     });
   }
 
   if (timezoneModalOverlay) {
     timezoneModalOverlay.addEventListener('click', (e) => {
       if (e.target === timezoneModalOverlay) {
-        timezoneModalOverlay.classList.remove('visible');
+        timezoneModalOverlay.classList.remove('modal-overlay--visible', 'show');
       }
     });
   }
