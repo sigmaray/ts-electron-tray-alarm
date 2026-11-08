@@ -9,14 +9,15 @@ interface Alarm {
   scheduledAt?: number;
   scheduledDate?: string;
   message?: string;
+  completed?: boolean;
 }
 
 interface ElectronAPI {
   minimizeWindow: () => void;
   closeApp: () => void;
-  addAlarm: (alarm: Alarm) => void;
-  updateAlarm: (alarm: Alarm) => void;
-  deleteAlarm: (alarmId: string) => void;
+  addAlarm: (alarm: Alarm) => Promise<{ ok: boolean; error?: string }>;
+  updateAlarm: (alarm: Alarm) => Promise<{ ok: boolean; error?: string }>;
+  deleteAlarm: (alarmId: string) => Promise<{ ok: boolean; error?: string }>;
   getAllAlarms: () => void;
   dismissAlarm: () => void;
   onAlarmsUpdated: (callback: (alarms: Alarm[]) => void) => void;
@@ -116,7 +117,7 @@ function openAlarmOptions(alarmId?: string): void {
   dateInput.focus();
 }
 
-function saveAlarmOptions(): void {
+async function saveAlarmOptions(): Promise<void> {
   const overlay = document.getElementById('alarmOptionsOverlay');
   const dateInput = document.getElementById('alarmOptionsDate') as HTMLInputElement | null;
   const messageInput = document.getElementById('alarmOptionsMessage') as HTMLTextAreaElement | null;
@@ -135,7 +136,7 @@ function saveAlarmOptions(): void {
   if (!Number.isInteger(second) || second < 0 || second > 59) { alert('Enter valid seconds (0–59)'); return; }
   const alarm = optionsAlarmId ? alarms.find(item => item.id === optionsAlarmId) : undefined;
   if (optionsAlarmId && !alarm) return;
-  if (hasAlarmAtTime(hour, minute, second, alarm?.id)) {
+  if (hasAlarmAtTime(hour, minute, second, alarm?.id, date, recurringInput.checked)) {
     alert('An alarm is already set for this time!');
     return;
   }
@@ -151,10 +152,19 @@ function saveAlarmOptions(): void {
   }
   if (alarm) {
     const electronAPI = (window as any).electronAPI as ElectronAPI | undefined;
-    electronAPI?.updateAlarm({ ...alarm, hour, minute, second, recurring: recurringInput.checked, scheduledDate: date, scheduledAt, message });
+    if (!electronAPI) return;
+    const scheduleChanged = hour !== alarm.hour || minute !== alarm.minute || second !== alarm.second
+      || recurringInput.checked !== alarm.recurring || date !== alarm.scheduledDate;
+    const result = await electronAPI.updateAlarm({
+      ...alarm, hour, minute, second, recurring: recurringInput.checked,
+      scheduledDate: date, scheduledAt, message,
+      completed: alarm.completed && !scheduleChanged ? true : undefined,
+    });
+    if (!result.ok) { alert(result.error ?? 'Could not update the alarm.'); return; }
   } else {
     const electronAPI = (window as any).electronAPI as ElectronAPI | undefined;
-    electronAPI?.addAlarm({
+    if (!electronAPI) return;
+    const result = await electronAPI.addAlarm({
       id: generateAlarmId(),
       hour,
       minute,
@@ -165,6 +175,7 @@ function saveAlarmOptions(): void {
       scheduledDate: date,
       message,
     });
+    if (!result.ok) { alert(result.error ?? 'Could not add the alarm.'); return; }
     (document.getElementById('newHour') as HTMLInputElement).value = '00';
     (document.getElementById('newMinute') as HTMLInputElement).value = '00';
     (document.getElementById('newSecond') as HTMLInputElement).value = '00';
@@ -206,13 +217,23 @@ function formatTimeUntil(seconds: number): string {
   return `in ${hours}h ${remainingMins}m`;
 }
 
-function hasAlarmAtTime(hour: number, minute: number, second: number, excludeAlarmId?: string): boolean {
+function hasAlarmAtTime(
+  hour: number,
+  minute: number,
+  second: number,
+  excludeAlarmId?: string,
+  scheduledDate?: string,
+  recurring = false,
+): boolean {
   return alarms.some(alarm => {
     // Skip the alarm currently being edited
     if (excludeAlarmId && alarm.id === excludeAlarmId) {
       return false;
     }
-    return alarm.hour === hour && alarm.minute === minute && alarm.second === second;
+    if (alarm.hour !== hour || alarm.minute !== minute || alarm.second !== second) return false;
+    const bothDateBoundOneShots = !alarm.recurring && !recurring
+      && alarm.scheduledDate !== undefined && scheduledDate !== undefined;
+    return bothDateBoundOneShots ? alarm.scheduledDate === scheduledDate : true;
   });
 }
 
@@ -338,9 +359,10 @@ function renderAlarms(): void {
     const displayMinute = scheduledLocalTime?.minute ?? alarm.minute;
     const displaySecond = scheduledLocalTime?.second ?? alarm.second;
     const timeStr = formatTime(displayHour, displayMinute, displaySecond);
-    const dateTimestamp = alarm.scheduledAt ?? alarmTime.nextAlarmTimestamp(currentTimezoneInfo?.effective ?? Intl.DateTimeFormat().resolvedOptions().timeZone, alarm, Date.now());
-    const dateLocal = alarmTime.localDateTimeInTimezone(currentTimezoneInfo?.effective ?? Intl.DateTimeFormat().resolvedOptions().timeZone, dateTimestamp);
-    const dateStr = `${dateLocal.year}-${String(dateLocal.month).padStart(2, '0')}-${String(dateLocal.day).padStart(2, '0')}`;
+    const dateStr = alarm.scheduledDate
+      ? alarm.scheduledDate
+      : dateInTimezone(currentTimezoneInfo?.effective ?? Intl.DateTimeFormat().resolvedOptions().timeZone,
+          alarm.scheduledAt ?? alarmTime.nextAlarmTimestamp(currentTimezoneInfo?.effective ?? Intl.DateTimeFormat().resolvedOptions().timeZone, alarm, Date.now()));
     
     if (isEditing) {
       // Use saved field values when available, otherwise use the alarm values
@@ -381,7 +403,7 @@ function renderAlarms(): void {
           <div class="alarm-item__info d-flex flex-wrap align-items-center gap-3">
             <div class="alarm-item__time d-flex flex-column">
               <span class="alarm-item__time-value fs-3 fw-bold font-monospace">${timeStr}</span>
-              <span class="alarm-item__date badge text-bg-secondary align-self-start">${dateStr}</span>
+              <span class="alarm-item__date badge ${alarm.completed ? 'text-bg-success' : 'text-bg-secondary'} align-self-start">${dateStr}${alarm.completed ? ' · Done' : ''}</span>
               ${alarm.enabled && timeUntilStr ? `<span class="alarm-item__countdown small text-body-secondary">${timeUntilStr}</span>` : ''}
             </div>
             <div class="alarm-item__toggles d-flex flex-wrap gap-3">
@@ -512,7 +534,7 @@ function setQuickTimeSecondsForEdit(alarmId: string, seconds: number): void {
   secondInput.value = String(second).padStart(2, '0');
 }
 
-function addAlarm(): void {
+async function addAlarm(): Promise<void> {
   const hourInput = document.getElementById('newHour') as HTMLInputElement;
   const minuteInput = document.getElementById('newMinute') as HTMLInputElement;
   const secondInput = document.getElementById('newSecond') as HTMLInputElement;
@@ -538,14 +560,12 @@ function addAlarm(): void {
     return;
   }
 
-  // Check whether an alarm already exists at this time
-  if (hasAlarmAtTime(hour, minute, second)) {
-    alert('An alarm is already set for this time!');
-    return;
-  }
-
   const recurringInput = document.getElementById('newRecurring') as HTMLInputElement;
   const recurring = recurringInput ? recurringInput.checked : false;
+  if (hasAlarmAtTime(hour, minute, second, undefined, pendingNewAlarmDate, recurring)) {
+    alert('An alarm already exists at that time and date.');
+    return;
+  }
 
   const newAlarm: Alarm = {
     id: generateAlarmId(),
@@ -560,9 +580,9 @@ function addAlarm(): void {
   };
 
   const electronAPI = (window as any).electronAPI as ElectronAPI | undefined;
-  if (electronAPI) {
-    electronAPI.addAlarm(newAlarm);
-  }
+  if (!electronAPI) return;
+  const result = await electronAPI.addAlarm(newAlarm);
+  if (!result.ok) { alert(result.error ?? 'Could not add the alarm.'); return; }
 
   // Reset the input fields
   hourInput.value = '00';
@@ -599,7 +619,7 @@ function cancelEdit(alarmId: string): void {
   renderAlarms();
 }
 
-function saveAlarm(alarmId: string): void {
+async function saveAlarm(alarmId: string): Promise<void> {
   const hourInput = document.getElementById(`edit-hour-${alarmId}`) as HTMLInputElement;
   const minuteInput = document.getElementById(`edit-minute-${alarmId}`) as HTMLInputElement;
   const secondInput = document.getElementById(`edit-second-${alarmId}`) as HTMLInputElement;
@@ -630,47 +650,62 @@ function saveAlarm(alarmId: string): void {
   if (!alarm) return;
 
   // Check whether another alarm already exists at this time
-  if (hasAlarmAtTime(hour, minute, second, alarmId)) {
-    alert('An alarm is already set for this time!');
+  if (hasAlarmAtTime(hour, minute, second, alarmId, alarm.scheduledDate, alarm.recurring)) {
+    alert('An alarm already exists at that time and date.');
     return;
   }
 
-  // Preserve the current recurring setting while editing
+  let scheduledDate = alarm.scheduledDate;
+  let scheduledAt: number | undefined;
+  if (pendingEditScheduledAt !== undefined) {
+    scheduledAt = pendingEditScheduledAt;
+    if (scheduledDate) scheduledDate = dateInTimezone(getEffectiveTimezoneForQuick(), scheduledAt);
+  } else if (scheduledDate) {
+    const targetTimestamp = alarmTime.zonedDateTimeToTimestamp(getEffectiveTimezoneForQuick(), {
+      year: Number(scheduledDate.slice(0, 4)),
+      month: Number(scheduledDate.slice(5, 7)),
+      day: Number(scheduledDate.slice(8, 10)),
+      hour, minute, second,
+    });
+    if (alarm.enabled && targetTimestamp <= Date.now()) {
+      alert('Choose a future date and time.');
+      return;
+    }
+    scheduledAt = targetTimestamp;
+  }
+
   const updatedAlarm: Alarm = {
     ...alarm,
     hour,
     minute,
     second,
-    scheduledAt: alarm.scheduledDate
-      ? alarmTime.zonedDateTimeToTimestamp(getEffectiveTimezoneForQuick(), {
-          year: Number(alarm.scheduledDate.slice(0, 4)), month: Number(alarm.scheduledDate.slice(5, 7)), day: Number(alarm.scheduledDate.slice(8, 10)),
-          hour, minute, second,
-        })
-      : pendingEditScheduledAt,
-    // Keep the recurring value unchanged
+    scheduledAt,
+    scheduledDate,
+    completed: alarm.completed && hour === alarm.hour && minute === alarm.minute && second === alarm.second
+      && scheduledDate === alarm.scheduledDate ? true : undefined,
   };
 
   const electronAPI = (window as any).electronAPI as ElectronAPI | undefined;
-  if (electronAPI) {
-    electronAPI.updateAlarm(updatedAlarm);
-  }
+  if (!electronAPI) return;
+  const result = await electronAPI.updateAlarm(updatedAlarm);
+  if (!result.ok) { alert(result.error ?? 'Could not update the alarm.'); return; }
 
   editingAlarmId = null;
   pendingEditScheduledAt = undefined;
 }
 
-function deleteAlarm(alarmId: string): void {
+async function deleteAlarm(alarmId: string): Promise<void> {
   if (!confirm('Are you sure you want to delete this alarm?')) {
     return;
   }
 
   const electronAPI = (window as any).electronAPI as ElectronAPI | undefined;
-  if (electronAPI) {
-    electronAPI.deleteAlarm(alarmId);
-  }
+  if (!electronAPI) return;
+  const result = await electronAPI.deleteAlarm(alarmId);
+  if (!result.ok) alert(result.error ?? 'Could not delete the alarm.');
 }
 
-function toggleAlarm(alarmId: string, enabled: boolean): void {
+async function toggleAlarm(alarmId: string, enabled: boolean): Promise<void> {
   const alarm = alarms.find(a => a.id === alarmId);
   if (!alarm) return;
 
@@ -680,12 +715,12 @@ function toggleAlarm(alarmId: string, enabled: boolean): void {
   };
 
   const electronAPI = (window as any).electronAPI as ElectronAPI | undefined;
-  if (electronAPI) {
-    electronAPI.updateAlarm(updatedAlarm);
-  }
+  if (!electronAPI) return;
+  const result = await electronAPI.updateAlarm(updatedAlarm);
+  if (!result.ok) { alert(result.error ?? 'Could not update the alarm.'); renderAlarms(); }
 }
 
-function toggleRecurring(alarmId: string, recurring: boolean): void {
+async function toggleRecurring(alarmId: string, recurring: boolean): Promise<void> {
   const alarm = alarms.find(a => a.id === alarmId);
   if (!alarm) return;
 
@@ -695,9 +730,9 @@ function toggleRecurring(alarmId: string, recurring: boolean): void {
   };
 
   const electronAPI = (window as any).electronAPI as ElectronAPI | undefined;
-  if (electronAPI) {
-    electronAPI.updateAlarm(updatedAlarm);
-  }
+  if (!electronAPI) return;
+  const result = await electronAPI.updateAlarm(updatedAlarm);
+  if (!result.ok) { alert(result.error ?? 'Could not update the alarm.'); renderAlarms(); }
 }
 
 function playAlarmSound(): void {
@@ -729,15 +764,9 @@ function playAlarmSound(): void {
     isAlarmPlaying = true;
     playBeep();
     audioInterval = setInterval(() => {
-      // Check that playback is active and the notification exists
+      // Keep sounding until the alarm is explicitly dismissed.
       if (audioContext && isAlarmPlaying) {
-        // Check that the notification is still active
-        if (alarmNotification) {
-          playBeep();
-        } else {
-          // The notification was closed, so stop the sound
-          stopAlarmSound();
-        }
+        playBeep();
       } else {
         stopAlarmSound();
       }
@@ -787,13 +816,17 @@ function dismissAlarm(): void {
   }
 }
 
-function showAlarmNotification(alarm: Alarm): void {
-  // Request notification permission
-  if (Notification.permission === 'default') {
-    Notification.requestPermission();
+async function showAlarmNotification(alarm: Alarm): Promise<void> {
+  let permission = Notification.permission;
+  if (permission === 'default') {
+    try {
+      permission = await Notification.requestPermission();
+    } catch (error) {
+      console.warn('Could not request notification permission:', error);
+    }
   }
 
-  if (Notification.permission === 'granted') {
+  if (permission === 'granted') {
     const timeStr = formatTime(alarm.hour, alarm.minute, alarm.second);
     alarmNotification = new Notification('⏰ Alarm!', {
       body: alarm.message?.trim() || `Time: ${timeStr}`,

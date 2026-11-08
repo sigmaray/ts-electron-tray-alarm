@@ -122,23 +122,112 @@ test.describe('Alarm Application', () => {
     await window.fill('#alarmOptionsMessage', 'Take your medicine');
     await window.click('#alarmOptionsSaveBtn');
 
-    const alarmRow = window.locator('.alarm-item:has-text("06:31:00")');
+    const alarmRow = window.locator('.alarm-item:has-text("2099-12-31")');
     await expect(alarmRow).toContainText('2099-12-31');
     await expect(window.locator('#newHour')).toHaveValue('00');
     await expect(window.locator('#newMinute')).toHaveValue('00');
     await expect(window.locator('#newSecond')).toHaveValue('00');
     await expect(window.locator('#newRecurring')).not.toBeChecked();
-    await alarmRow.locator('.btn-options').click();
+    await window.fill('#newHour', '06');
+    await window.fill('#newMinute', '31');
+    await window.fill('#newSecond', '00');
+    await window.click('#newAlarmOptionsBtn');
+    await window.fill('#alarmOptionsDate', '2099-12-30');
+    await window.fill('#alarmOptionsMessage', 'Second date');
+    await window.click('#alarmOptionsSaveBtn');
+    await expect(window.locator('.alarm-item:has-text("06:31:00")')).toHaveCount(2);
+
+    await alarmRow.locator('.alarm-actions__options').click();
     await expect(window.locator('#alarmOptionsHour')).toHaveValue('06');
     await expect(window.locator('#alarmOptionsMinute')).toHaveValue('31');
     await expect(window.locator('#alarmOptionsMessage')).toHaveValue('Take your medicine');
     await window.fill('#alarmOptionsMessage', 'Call home');
-    await window.locator('#alarmOptionsRecurring').check();
     await window.click('#alarmOptionsSaveBtn');
     await expect.poll(() => {
       const settings = JSON.parse(fs.readFileSync(path.join(__dirname, '../../dist/settings.json'), 'utf8'));
-      return settings.alarms.find((alarm: { hour: number; minute: number }) => alarm.hour === 6 && alarm.minute === 31);
-    }).toMatchObject({ message: 'Call home', recurring: true });
+      return settings.alarms.find((alarm: { hour: number; minute: number; scheduledDate: string }) => alarm.hour === 6 && alarm.minute === 31 && alarm.scheduledDate === '2099-12-31');
+    }).toMatchObject({ message: 'Call home', recurring: false });
+
+    const originalTimezone = await window.evaluate(() => (window as any).electronAPI.getCurrentTimezone());
+    const alternateTimezone = originalTimezone.effective === 'Asia/Tokyo' ? 'America/New_York' : 'Asia/Tokyo';
+    const originalTimestamp = JSON.parse(fs.readFileSync(path.join(__dirname, '../../dist/settings.json'), 'utf8'))
+      .alarms.find((alarm: { scheduledDate: string }) => alarm.scheduledDate === '2099-12-31').scheduledAt;
+    try {
+      await window.click('#timezoneBtn');
+      await window.locator('#timezoneList').selectOption(alternateTimezone);
+      await window.click('#timezoneSaveBtn');
+      await expect.poll(() => {
+        const settings = JSON.parse(fs.readFileSync(path.join(__dirname, '../../dist/settings.json'), 'utf8'));
+        return settings.alarms.find((alarm: { scheduledDate: string }) => alarm.scheduledDate === '2099-12-31')?.scheduledAt;
+      }).not.toBe(originalTimestamp);
+    } finally {
+      await window.click('#timezoneBtn');
+      await window.locator('#timezoneList').selectOption(originalTimezone.isSystem ? '' : originalTimezone.effective);
+      await window.click('#timezoneSaveBtn');
+    }
+
+    const rejectedCreate = await window.evaluate(async () => (window as any).electronAPI.addAlarm({
+      id: 'alarm-duplicate-test', hour: 6, minute: 31, second: 0,
+      enabled: true, recurring: false, scheduledDate: '2099-12-31',
+      scheduledAt: Date.parse('2099-12-31T06:31:00.000Z'),
+    }));
+    expect(rejectedCreate).toMatchObject({ ok: false, error: expect.stringContaining('already exists') });
+  });
+
+  test('keeps alarm sound active before browser notification permission resolves', async () => {
+    await window.evaluate(() => {
+      (window as any).__originalAudioContext = window.AudioContext;
+      (window as any).__originalNotification = window.Notification;
+      class StubGain {
+        gain = { setValueAtTime() {}, exponentialRampToValueAtTime() {} };
+        connect() {}
+      }
+      class StubOscillator {
+        frequency = { value: 0 };
+        type = '';
+        connect() {}
+        start() { (window as any).__beepCount = ((window as any).__beepCount ?? 0) + 1; }
+        stop() {}
+      }
+      class StubAudioContext {
+        currentTime = 0;
+        destination = {};
+        createOscillator() { return new StubOscillator(); }
+        createGain() { return new StubGain(); }
+        close() { return Promise.resolve(); }
+      }
+      class DelayedNotification {
+        static permission = 'default';
+        static requestPermission() { return new Promise<NotificationPermission>(() => {}); }
+      }
+      Object.defineProperty(window, 'AudioContext', { configurable: true, value: StubAudioContext });
+      Object.defineProperty(window, 'Notification', { configurable: true, value: DelayedNotification });
+      (window as any).__beepCount = 0;
+    });
+
+    const scheduledAt = Date.now() + 1500;
+    const alarmTime = await window.evaluate(() => {
+      const parts = new Intl.DateTimeFormat('en-GB', {
+        timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23',
+      }).formatToParts(new Date(Date.now() + 1500));
+      const get = (type: string) => Number(parts.find(part => part.type === type)?.value ?? 0);
+      return { hour: get('hour'), minute: get('minute'), second: get('second') };
+    });
+    const created = await window.evaluate(async ({ at, time }) => (window as any).electronAPI.addAlarm({
+      id: 'alarm-audio-permission-test', ...time, enabled: true, recurring: false, scheduledAt: at,
+    }), { at: scheduledAt, time: alarmTime });
+    expect(created.ok).toBe(true);
+
+    await expect.poll(() => window.evaluate(() => (window as any).__beepCount), { timeout: 5000 }).toBeGreaterThanOrEqual(2);
+    await expect(window.locator('#dismissAlarmBtn')).toBeVisible();
+    await window.click('#dismissAlarmBtn');
+    await window.evaluate(() => {
+      Object.defineProperty(window, 'AudioContext', { configurable: true, value: (window as any).__originalAudioContext });
+      Object.defineProperty(window, 'Notification', { configurable: true, value: (window as any).__originalNotification });
+      delete (window as any).__originalAudioContext;
+      delete (window as any).__originalNotification;
+    });
   });
 
   test('adds multiple alarms', async () => {

@@ -5,11 +5,18 @@ export interface Alarm {
   id: string;
   hour: number;
   minute: number;
+  second: number;
   enabled: boolean;
   recurring: boolean;
   scheduledAt?: number;
   scheduledDate?: string;
   message?: string;
+  completed?: boolean;
+}
+
+export interface AlarmOperationResult {
+  ok: boolean;
+  error?: string;
 }
 
 // Expose a safe API to the renderer process
@@ -24,15 +31,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.send('close-app');
   },
   // Alarm commands
-  addAlarm: (alarm: Alarm) => {
-    ipcRenderer.send('alarm-add', alarm);
-  },
-  updateAlarm: (alarm: Alarm) => {
-    ipcRenderer.send('alarm-update', alarm);
-  },
-  deleteAlarm: (alarmId: string) => {
-    ipcRenderer.send('alarm-delete', alarmId);
-  },
+  addAlarm: (alarm: Alarm) => ipcRenderer.invoke('alarm-add', alarm) as Promise<AlarmOperationResult>,
+  updateAlarm: (alarm: Alarm) => ipcRenderer.invoke('alarm-update', alarm) as Promise<AlarmOperationResult>,
+  deleteAlarm: (alarmId: string) => ipcRenderer.invoke('alarm-delete', alarmId) as Promise<AlarmOperationResult>,
   getAllAlarms: () => {
     ipcRenderer.send('alarm-get-all');
   },

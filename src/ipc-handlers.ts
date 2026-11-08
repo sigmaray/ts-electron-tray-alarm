@@ -1,6 +1,6 @@
 import { app, ipcMain, IpcMain } from 'electron';
 import { Alarm, isValidAlarmPayload, normalizeTimeZone } from './settings';
-import { alarmTimeHasPassedToday, localDateTimeInTimezone, nextAlarmTimestamp, zonedDateTimeToTimestamp } from './time.js';
+import { hasDuplicateAlarm, isAlarmDateInFuture, rescheduleAlarmsForTimezone, scheduleAlarm } from './alarm-scheduling';
 
 export interface IpcDependencies {
   getAlarms(): Alarm[];
@@ -19,34 +19,51 @@ export interface IpcDependencies {
 }
 
 export function registerIpcHandlers(deps: IpcDependencies, handlers: IpcMain = ipcMain): void {
-  handlers.on('alarm-add', (_event, alarm: Alarm) => {
+  handlers.handle('alarm-add', (_event, alarm: Alarm) => {
     const current = deps.getAlarms();
-    if (!isValidAlarmPayload(alarm) || current.some(existing => existing.id === alarm.id)) return;
-    if (current.some(existing => existing.hour === alarm.hour && existing.minute === alarm.minute && existing.second === alarm.second)) return;
-    deps.setAlarms([...current, scheduleAlarm(alarm, deps)]);
+    if (!isValidAlarmPayload(alarm) || current.some(existing => existing.id === alarm.id)) {
+      return { ok: false, error: 'Invalid alarm data.' };
+    }
+    if (alarm.enabled && alarm.scheduledDate && !isAlarmDateInFuture(alarm, deps.getEffectiveTimezone())) {
+      return { ok: false, error: 'Choose a future date and time.' };
+    }
+    if (current.some(existing => hasDuplicateAlarm(existing, alarm))) {
+      return { ok: false, error: 'An alarm already exists at that time and date.' };
+    }
+    deps.setAlarms([...current, scheduleAlarm(alarm, deps.getEffectiveTimezone())]);
     deps.saveSettings();
     deps.updateTrayIcon();
     deps.sendAlarmsToRenderer();
+    return { ok: true };
   });
-  handlers.on('alarm-update', (_event, alarm: Alarm) => {
+  handlers.handle('alarm-update', (_event, alarm: Alarm) => {
     const current = deps.getAlarms();
-    if (!isValidAlarmPayload(alarm)) return;
+    if (!isValidAlarmPayload(alarm)) return { ok: false, error: 'Invalid alarm data.' };
     const index = current.findIndex(existing => existing.id === alarm.id);
-    if (index < 0) return;
-    if (current.some(existing => existing.id !== alarm.id && existing.hour === alarm.hour && existing.minute === alarm.minute && existing.second === alarm.second)) return;
+    if (index < 0) return { ok: false, error: 'Alarm no longer exists.' };
+    if (alarm.enabled && alarm.scheduledDate && !alarm.completed && !isAlarmDateInFuture(alarm, deps.getEffectiveTimezone())) {
+      return { ok: false, error: 'Choose a future date and time.' };
+    }
+    if (current.some(existing => existing.id !== alarm.id && hasDuplicateAlarm(existing, alarm))) {
+      return { ok: false, error: 'An alarm already exists at that time and date.' };
+    }
     const updated = [...current];
-    updated[index] = scheduleAlarm(alarm, deps);
+    updated[index] = scheduleAlarm(alarm, deps.getEffectiveTimezone());
     deps.setAlarms(updated);
     deps.saveSettings();
     deps.updateTrayIcon();
     deps.sendAlarmsToRenderer();
+    return { ok: true };
   });
-  handlers.on('alarm-delete', (_event, alarmId: string) => {
-    if (typeof alarmId !== 'string') return;
-    deps.setAlarms(deps.getAlarms().filter(alarm => alarm.id !== alarmId));
+  handlers.handle('alarm-delete', (_event, alarmId: string) => {
+    if (typeof alarmId !== 'string') return { ok: false, error: 'Invalid alarm ID.' };
+    const current = deps.getAlarms();
+    if (!current.some(alarm => alarm.id === alarmId)) return { ok: false, error: 'Alarm no longer exists.' };
+    deps.setAlarms(current.filter(alarm => alarm.id !== alarmId));
     deps.saveSettings();
     deps.updateTrayIcon();
     deps.sendAlarmsToRenderer();
+    return { ok: true };
   });
   handlers.on('alarm-get-all', () => deps.sendAlarmsToRenderer());
   handlers.on('minimize-window', () => deps.minimizeWindow());
@@ -72,30 +89,10 @@ export function registerIpcHandlers(deps: IpcDependencies, handlers: IpcMain = i
     const normalized = normalizeTimeZone(timezone);
     if (timezone !== null && timezone.trim() !== '' && normalized === null) throw new RangeError('Unknown time zone');
     deps.setTimezonePref(normalized);
+    deps.setAlarms(rescheduleAlarmsForTimezone(deps.getAlarms(), deps.getEffectiveTimezone()));
     deps.saveSettings();
+    deps.updateTrayIcon();
+    deps.sendAlarmsToRenderer();
     return { effective: deps.getEffectiveTimezone(), isSystem: deps.getTimezonePref() === null };
   });
-}
-
-function scheduleAlarm(alarm: Alarm, deps: IpcDependencies): Alarm {
-  const scheduled = { ...alarm };
-  if (!scheduled.enabled) {
-    delete scheduled.scheduledAt;
-  } else if (scheduled.scheduledAt === undefined && scheduled.scheduledDate) {
-    const [year, month, day] = scheduled.scheduledDate.split('-').map(Number);
-    const target = zonedDateTimeToTimestamp(deps.getEffectiveTimezone(), {
-      year, month, day, hour: scheduled.hour, minute: scheduled.minute, second: scheduled.second,
-    });
-    if (target > Date.now()) {
-      scheduled.scheduledAt = target;
-    } else {
-      scheduled.scheduledAt = nextAlarmTimestamp(deps.getEffectiveTimezone(), scheduled, Date.now());
-      const next = localDateTimeInTimezone(deps.getEffectiveTimezone(), scheduled.scheduledAt);
-      scheduled.scheduledDate = `${next.year}-${String(next.month).padStart(2, '0')}-${String(next.day).padStart(2, '0')}`;
-    }
-  } else if (scheduled.scheduledAt === undefined
-    && alarmTimeHasPassedToday(deps.getEffectiveTimezone(), scheduled, Date.now())) {
-    scheduled.scheduledAt = nextAlarmTimestamp(deps.getEffectiveTimezone(), scheduled, Date.now());
-  }
-  return scheduled;
 }

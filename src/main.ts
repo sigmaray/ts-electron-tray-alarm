@@ -3,7 +3,8 @@ import * as path from 'path';
 import { createCanvas } from 'canvas';
 import { Alarm, createSettingsStore } from './settings';
 import { registerIpcHandlers } from './ipc-handlers';
-import { alarmTimeHasPassedToday, localDateTimeInTimezone, nextAlarmTimestamp, zonedDateTimeToTimestamp } from './time.js';
+import { scheduleAlarm } from './alarm-scheduling';
+import { localDateTimeInTimezone, nextAlarmTimestamp, zonedDateTimeToTimestamp } from './time.js';
 
 // Extend the Electron app type with the isQuitting flag
 declare global {
@@ -416,10 +417,14 @@ function checkAlarms(): void {
       alarm.scheduledAt = nextAlarmTimestamp(tz, { ...alarm, scheduledAt: undefined }, nowMs);
       const nextLocal = localDateTimeInTimezone(tz, alarm.scheduledAt);
       alarm.scheduledDate = `${nextLocal.year}-${String(nextLocal.month).padStart(2, '0')}-${String(nextLocal.day).padStart(2, '0')}`;
+      delete alarm.completed;
       saveAlarms();
       sendAlarmsToRenderer();
     } else {
+      const firedLocal = localDateTimeInTimezone(tz, fireTs);
+      alarm.scheduledDate = `${firedLocal.year}-${String(firedLocal.month).padStart(2, '0')}-${String(firedLocal.day).padStart(2, '0')}`;
       delete alarm.scheduledAt;
+      alarm.completed = true;
       const index = alarms.findIndex(a => a.id === alarm.id);
       if (index !== -1) {
         alarms[index].enabled = false;
@@ -673,10 +678,7 @@ function initializeApp(): void {
   countdownWindowVisiblePref = settings.countdownWindowVisible;
   timezonePref = settings.timezone ?? null;
   const now = Date.now();
-  alarms = settings.alarms.map(alarm => alarm.enabled && alarm.scheduledAt === undefined
-    && alarmTimeHasPassedToday(getEffectiveTimezone(), alarm, now)
-    ? { ...alarm, scheduledAt: nextAlarmTimestamp(getEffectiveTimezone(), alarm, now) }
-    : alarm);
+  alarms = settings.alarms.map(alarm => scheduleAlarm(alarm, getEffectiveTimezone(), now));
   if (alarms.some((alarm, index) => alarm.scheduledAt !== settings.alarms[index].scheduledAt)) saveSettings();
 
   createWindow();

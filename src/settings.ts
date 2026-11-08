@@ -12,6 +12,7 @@ export interface Alarm {
   scheduledAt?: number;
   scheduledDate?: string;
   message?: string;
+  completed?: boolean;
 }
 
 export interface AppSettings {
@@ -60,6 +61,7 @@ function parseAlarm(raw: unknown): Alarm | null {
     ...(scheduledAt === undefined ? {} : { scheduledAt }),
     ...(isValidDate(item.scheduledDate) ? { scheduledDate: item.scheduledDate as string } : {}),
     ...(typeof item.message === 'string' ? { message: item.message.slice(0, 500) } : {}),
+    ...(item.completed === true ? { completed: true } : {}),
   };
 }
 
@@ -103,7 +105,8 @@ export function isValidAlarmPayload(value: unknown): value is Alarm {
     && typeof alarm.recurring === 'boolean'
     && (alarm.scheduledAt === undefined || (typeof alarm.scheduledAt === 'number' && Number.isFinite(alarm.scheduledAt) && Math.abs(alarm.scheduledAt) <= 8.64e15))
     && (alarm.scheduledDate === undefined || isValidDate(alarm.scheduledDate))
-    && (alarm.message === undefined || (typeof alarm.message === 'string' && alarm.message.length <= 500));
+    && (alarm.message === undefined || (typeof alarm.message === 'string' && alarm.message.length <= 500))
+    && (alarm.completed === undefined || typeof alarm.completed === 'boolean');
 }
 
 export function parseSettings(raw: unknown): AppSettings {
