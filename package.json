@@ -10,6 +10,7 @@
     "build": "tsc && cp src/index.html src/countdown.html dist/",
     "typecheck": "tsc --noEmit",
     "build:electron": "electron-builder --publish never",
+    "test:unit": "npm run build && node --test tests/unit/*.test.cjs",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:headed": "playwright test --headed"
@@ -36,6 +37,12 @@
       "dist/**/*",
       "package.json",
       "node_modules/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "portable-mode",
+        "to": "portable-mode"
+      }
     ],
     "win": {
       "target": [

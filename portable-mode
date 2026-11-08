@@ -1,0 +1,2 @@
+Presence of this file in the packaged resources enables portable settings storage.
+Settings are stored beside this marker when that directory is writable.

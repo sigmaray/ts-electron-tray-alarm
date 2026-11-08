@@ -1,8 +1,8 @@
-import { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, dialog, screen, Notification } from 'electron';
+import { app, BrowserWindow, Tray, Menu, nativeImage, dialog, screen, Notification } from 'electron';
 import * as path from 'path';
-import * as fs from 'fs';
-import { randomUUID } from 'crypto';
 import { createCanvas } from 'canvas';
+import { Alarm, createSettingsStore } from './settings';
+import { registerIpcHandlers } from './ipc-handlers';
 
 // Расширяем тип app для свойства isQuitting
 declare global {
@@ -26,15 +26,6 @@ if (process.env.NODE_ENV === 'test' || process.env.ELECTRON_DISABLE_SANDBOX) {
 }
 
 // Тип для будильника
-interface Alarm {
-  id: string;
-  hour: number;
-  minute: number;
-  second: number;
-  enabled: boolean;
-  recurring: boolean;
-}
-
 let alarms: Alarm[] = [];
 let alarmCheckInterval: NodeJS.Timeout | null = null;
 let lastTriggeredDate: string = ''; // Для отслеживания сработавших будильников сегодня
@@ -43,26 +34,11 @@ let blinkInterval: NodeJS.Timeout | null = null;
 let isBlinking = false;
 let isAlarmActive = false; // Флаг активного будильника (играет звук)
 
-// Путь к файлу настроек
-function getSettingsPath(): string {
-  const appPath = app.getAppPath();
-  return path.join(appPath, 'settings.json');
-}
+let settingsStore: ReturnType<typeof createSettingsStore> | null = null;
 
 // Системная таймзона
 function getSystemTimezone(): string {
   return Intl.DateTimeFormat().resolvedOptions().timeZone;
-}
-
-// Список таймзон для старых сред без Intl.supportedValuesOf
-function getFallbackTimezones(): string[] {
-  return [
-    'Europe/Moscow', 'Europe/Samara', 'Europe/Volgograd', 'Europe/Kaliningrad',
-    'Europe/Minsk', 'Europe/Kyiv', 'Europe/London', 'Europe/Paris', 'Europe/Berlin',
-    'Asia/Yekaterinburg', 'Asia/Novosibirsk', 'Asia/Vladivostok', 'Asia/Tokyo',
-    'Asia/Shanghai', 'Asia/Almaty', 'America/New_York', 'America/Los_Angeles',
-    'America/Chicago', 'UTC',
-  ];
 }
 
 // Активная таймзона (из настроек или системная)
@@ -131,82 +107,12 @@ function addGregorianCalendarDays(year: number, month: number, day: number, delt
   return { year: d.getUTCFullYear(), month: d.getUTCMonth() + 1, day: d.getUTCDate() };
 }
 
-interface AppSettings {
-  alarms: Alarm[];
-  countdownWindowVisible: boolean;
-  timezone?: string | null;
-}
-
-/** Часы/минуты/секунды из JSON: отсекает дробь, отбрасывает NaN/∞, ограничивает диапазон. */
-function clampTimeUnit(value: unknown, min: number, max: number): number {
-  const n = typeof value === 'number' ? value : Number(value);
-  if (!Number.isFinite(n)) return min;
-  const t = Math.trunc(n);
-  if (t < min) return min;
-  if (t > max) return max;
-  return t;
-}
-
-function parseAlarmFromSettingsJson(raw: unknown): Alarm | null {
-  if (raw === null || typeof raw !== 'object') return null;
-  const o = raw as Record<string, unknown>;
-  const idRaw = o.id;
-  const id =
-    typeof idRaw === 'string' && idRaw.trim() !== ''
-      ? idRaw.trim()
-      : `alarm-${randomUUID()}`;
-  return {
-    id,
-    hour: clampTimeUnit(o.hour, 0, 23),
-    minute: clampTimeUnit(o.minute, 0, 59),
-    second: clampTimeUnit(o.second, 0, 59),
-    enabled: Boolean(o.enabled),
-    recurring: Boolean(o.recurring),
-  };
-}
-
-function parseAlarmsFromSettingsJson(raw: unknown): Alarm[] {
-  if (!Array.isArray(raw)) return [];
-  return raw.map(parseAlarmFromSettingsJson).filter((a): a is Alarm => a !== null);
-}
-
-// Загрузка настроек из файла
-function loadSettings(): AppSettings {
-  try {
-    const settingsPath = getSettingsPath();
-    if (fs.existsSync(settingsPath)) {
-      const data = fs.readFileSync(settingsPath, 'utf-8');
-      const settings = JSON.parse(data);
-      return {
-        alarms: parseAlarmsFromSettingsJson(settings.alarms),
-        countdownWindowVisible: Boolean(settings.countdownWindowVisible),
-        timezone: settings.timezone != null ? String(settings.timezone) : undefined,
-      };
-    }
-  } catch (error) {
-    console.error('Ошибка при загрузке настроек:', error);
-  }
-  return { alarms: [], countdownWindowVisible: false };
-}
-
-// Сохранение настроек в файл
-function saveSettings(): void {
-  try {
-    const settingsPath = getSettingsPath();
-    const settings: AppSettings = {
-      alarms,
-      countdownWindowVisible: countdownWindowVisiblePref,
-      timezone: timezonePref,
-    };
-    const data = JSON.stringify(settings, null, 2);
-    fs.writeFileSync(settingsPath, data, 'utf-8');
-  } catch (error) {
-    console.error('Ошибка при сохранении настроек:', error);
-  }
-}
-
 let countdownWindowVisiblePref = false;
 let timezonePref: string | null = null; // null = системная таймзона
+
+function saveSettings(): void {
+  settingsStore?.save({ alarms, countdownWindowVisible: countdownWindowVisiblePref, timezone: timezonePref });
+}
 
 // Сохранение будильников в файл (сохраняет все настройки)
 function saveAlarms(): void {
@@ -811,8 +717,16 @@ function createTray(): void {
 
 // Функция инициализации приложения
 function initializeApp(): void {
+  const store = createSettingsStore({
+    isPackaged: app.isPackaged,
+    appPath: app.getAppPath(),
+    resourcesPath: process.resourcesPath,
+    userDataPath: app.getPath('userData'),
+    overridePath: process.env.ALARM_SETTINGS_PATH,
+  });
+  settingsStore = store;
   // Загружаем настройки из файла при запуске
-  const settings = loadSettings();
+  const settings = store.load();
   alarms = settings.alarms;
   countdownWindowVisiblePref = settings.countdownWindowVisible;
   timezonePref = settings.timezone ?? null;
@@ -825,94 +739,25 @@ function initializeApp(): void {
     createCountdownWindow();
   }
 
-  // Обработчики для управления будильниками
-  ipcMain.on('alarm-add', (_event, alarm: Alarm) => {
-    alarms.push(alarm);
-    saveAlarms();
-    updateTrayIcon();
-    sendAlarmsToRenderer();
-  });
-
-  ipcMain.on('alarm-update', (_event, alarm: Alarm) => {
-    const index = alarms.findIndex(a => a.id === alarm.id);
-    if (index !== -1) {
-      alarms[index] = alarm;
-      saveAlarms();
-      updateTrayIcon();
-      sendAlarmsToRenderer();
-    }
-  });
-
-  ipcMain.on('alarm-delete', (_event, alarmId: string) => {
-    alarms = alarms.filter(a => a.id !== alarmId);
-    saveAlarms();
-    updateTrayIcon();
-    sendAlarmsToRenderer();
-  });
-
-  ipcMain.on('alarm-get-all', () => {
-    sendAlarmsToRenderer();
-  });
-
-  // Обработчик сворачивания окна в трей
-  ipcMain.on('minimize-window', () => {
-    if (mainWindow) {
-      mainWindow.hide();
+  registerIpcHandlers({
+    getAlarms: () => alarms,
+    setAlarms: value => { alarms = value; },
+    saveSettings,
+    updateTrayIcon,
+    sendAlarmsToRenderer,
+    minimizeWindow: () => { mainWindow?.hide(); updateTrayMenu(); },
+    trayClick: () => {
+      if (!tray || !mainWindow) return;
+      if (mainWindow.isVisible()) mainWindow.hide();
+      else { mainWindow.show(); mainWindow.focus(); }
       updateTrayMenu();
-    }
-  });
-
-  // Обработчик эмуляции клика по иконке трея (для тестов)
-  ipcMain.on('tray-click', () => {
-    if (tray && mainWindow) {
-      if (mainWindow.isVisible()) {
-        mainWindow.hide();
-      } else {
-        mainWindow.show();
-        mainWindow.focus();
-      }
-      updateTrayMenu();
-    }
-  });
-
-  // Обработчик закрытия приложения
-  ipcMain.on('close-app', () => {
-    app.isQuitting = true;
-    app.quit();
-  });
-
-  // Обработчик остановки мигания будильника (когда пользователь отключает звук)
-  ipcMain.on('alarm-dismiss', () => {
-    stopBlinking();
-  });
-
-  // Окно отсчёта времени
-  ipcMain.on('countdown-window-toggle', () => {
-    toggleCountdownWindow();
-  });
-  ipcMain.on('countdown-window-close', () => {
-    destroyCountdownWindow();
-  });
-
-  // Таймзона: список, текущая, установка
-  ipcMain.handle('get-timezones', (): string[] => {
-    const intl = Intl as typeof Intl & { supportedValuesOf?(key: string): string[] };
-    if (typeof intl.supportedValuesOf === 'function') {
-      return intl.supportedValuesOf('timeZone');
-    }
-    return getFallbackTimezones();
-  });
-  ipcMain.handle('get-current-timezone', (): { effective: string; isSystem: boolean } => {
-    const effective = getEffectiveTimezone();
-    const isSystem = timezonePref === null;
-    return { effective, isSystem };
-  });
-  ipcMain.handle('set-timezone', (_event, tz: string | null) => {
-    timezonePref = tz && tz.trim() !== '' ? tz.trim() : null;
-    saveSettings();
-    const effective = getEffectiveTimezone();
-    const isSystem = timezonePref === null;
-    return { effective, isSystem };
+    },
+    toggleCountdownWindow,
+    destroyCountdownWindow,
+    stopBlinking,
+    getEffectiveTimezone,
+    getTimezonePref: () => timezonePref,
+    setTimezonePref: value => { timezonePref = value; },
   });
 
   app.on('activate', () => {

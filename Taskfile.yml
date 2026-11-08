@@ -1,0 +1,21 @@
+version: '3'
+
+tasks:
+  build:
+    cmds:
+      - npm run build
+  dev:
+    cmds:
+      - npm run dev
+  typecheck:
+    cmds:
+      - npm run typecheck
+  test:unit:
+    cmds:
+      - npm run test:unit
+  test:e2e:
+    cmds:
+      - npm run test:e2e
+  package:
+    cmds:
+      - npm run build:electron

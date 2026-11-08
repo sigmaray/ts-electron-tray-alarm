@@ -29,6 +29,8 @@ test.describe('Alarm Application', () => {
       env: {
         ...process.env,
         ELECTRON_DISABLE_SANDBOX: '1',
+        // Keep E2E persistence isolated from the user's real application settings.
+        ALARM_SETTINGS_PATH: path.join(__dirname, '../../dist/settings.json'),
       },
     });
 
