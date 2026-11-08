@@ -99,11 +99,11 @@ jobs:
         tag_name: release-${{ needs.prepare.outputs.datetime }}
         name: Release ${{ needs.prepare.outputs.datetime }}
         body: |
-          Автоматический релиз от ${{ needs.prepare.outputs.datetime }}
+          Automated release for ${{ needs.prepare.outputs.datetime }}
           
-          Коммит: ${{ github.sha }}
+          Commit: ${{ github.sha }}
           
-          Собранные платформы:
+          Platforms built:
           - Windows
           - Linux
           - macOS

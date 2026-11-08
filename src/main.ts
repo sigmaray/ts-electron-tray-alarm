@@ -4,7 +4,7 @@ import { createCanvas } from 'canvas';
 import { Alarm, createSettingsStore } from './settings';
 import { registerIpcHandlers } from './ipc-handlers';
 
-// Расширяем тип app для свойства isQuitting
+// Extend the Electron app type with the isQuitting flag
 declare global {
   namespace Electron {
     interface App {
@@ -17,31 +17,31 @@ let mainWindow: BrowserWindow | null = null;
 let countdownWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 
-// Константа для управления разрешением только одного экземпляра приложения
+// Control whether only one app instance may run
 const ALLOW_ONLY_ONE_INSTANCE = process.env.ALLOW_ONLY_ONE_INSTANCE !== 'false';
 
-// Экспортируем tray для тестирования (только в development режиме)
+// Expose the tray for tests in development mode
 if (process.env.NODE_ENV === 'test' || process.env.ELECTRON_DISABLE_SANDBOX) {
   (global as any).__tray__ = () => tray;
 }
 
-// Тип для будильника
+// Alarm type
 let alarms: Alarm[] = [];
 let alarmCheckInterval: NodeJS.Timeout | null = null;
-let lastTriggeredDate: string = ''; // Для отслеживания сработавших будильников сегодня
-let triggeredAlarmsToday: Set<string> = new Set(); // ID будильников, сработавших сегодня
+let lastTriggeredDate: string = ''; // Track alarms that have fired today
+let triggeredAlarmsToday: Set<string> = new Set(); // IDs of alarms that have fired today
 let blinkInterval: NodeJS.Timeout | null = null;
 let isBlinking = false;
-let isAlarmActive = false; // Флаг активного будильника (играет звук)
+let isAlarmActive = false; // Whether an alarm is currently sounding
 
 let settingsStore: ReturnType<typeof createSettingsStore> | null = null;
 
-// Системная таймзона
+// System time zone
 function getSystemTimezone(): string {
   return Intl.DateTimeFormat().resolvedOptions().timeZone;
 }
 
-// Активная таймзона (из настроек или системная)
+// Active time zone from settings, or the system time zone
 function getEffectiveTimezone(): string {
   if (timezonePref && timezonePref.trim() !== '') {
     return timezonePref;
@@ -49,7 +49,7 @@ function getEffectiveTimezone(): string {
   return getSystemTimezone();
 }
 
-// Текущие локальные час, минута, секунда и дата в указанной таймзоне
+// Current local date and time in the specified time zone
 function getLocalTimeInTimezone(tz: string): { year: number; month: number; day: number; hour: number; minute: number; second: number } {
   const now = new Date();
   const formatter = new Intl.DateTimeFormat('en-CA', {
@@ -77,7 +77,7 @@ function getLocalTimeInTimezone(tz: string): { year: number; month: number; day:
   };
 }
 
-// UTC-метка момента (year, month, day, hour, minute, second) в таймзоне tz
+// UTC timestamp for the given date and time in time zone tz
 function getTimestampInTimezone(tz: string, year: number, month: number, day: number, hour: number, minute: number, second: number): number {
   const formatter = new Intl.DateTimeFormat('en-CA', {
     timeZone: tz,
@@ -100,7 +100,7 @@ function getTimestampInTimezone(tz: string, year: number, month: number, day: nu
   return Date.UTC(year, month - 1, day, hour, minute, second) - offsetMs;
 }
 
-/** Сдвиг календарной даты в григорианском календаре. `Date.UTC` — только нормализация (переходы месяца/года), не системная таймзона. */
+/** Shift a Gregorian calendar date. Date.UTC normalizes month/year boundaries without using the system time zone. */
 function addGregorianCalendarDays(year: number, month: number, day: number, deltaDays: number): { year: number; month: number; day: number } {
   const ms = Date.UTC(year, month - 1, day + deltaDays);
   const d = new Date(ms);
@@ -108,13 +108,13 @@ function addGregorianCalendarDays(year: number, month: number, day: number, delt
 }
 
 let countdownWindowVisiblePref = false;
-let timezonePref: string | null = null; // null = системная таймзона
+let timezonePref: string | null = null; // null means use the system time zone
 
 function saveSettings(): void {
   settingsStore?.save({ alarms, countdownWindowVisible: countdownWindowVisiblePref, timezone: timezonePref });
 }
 
-// Сохранение будильников в файл (сохраняет все настройки)
+// Save alarms and all other settings to disk
 function saveAlarms(): void {
   saveSettings();
 }
@@ -122,7 +122,7 @@ function saveAlarms(): void {
 function updateTrayMenu(): void {
   if (!tray) return;
   const isVisible = mainWindow?.isVisible() ?? false;
-  const toggleLabel = isVisible ? 'Свернуть в трей' : 'Показать';
+  const toggleLabel = isVisible ? 'Minimize to Tray' : 'Show';
 
   const contextMenu = Menu.buildFromTemplate([
     {
@@ -139,15 +139,15 @@ function updateTrayMenu(): void {
       },
     },
     {
-      label: 'Выход',
+      label: 'Quit',
       click: async () => {
         const result = await dialog.showMessageBox(mainWindow || null as any, {
           type: 'question',
-          buttons: ['Отмена', 'Закрыть'],
+          buttons: ['Cancel', 'Close'],
           defaultId: 0,
           cancelId: 0,
-          title: 'Подтверждение',
-          message: 'Вы уверены, что хотите закрыть приложение?'
+          title: 'Confirmation',
+          message: 'Are you sure you want to quit the application?'
         });
 
         if (result.response === 1) {
@@ -162,32 +162,32 @@ function updateTrayMenu(): void {
 }
 
 function createTextIcon(text: string, isBlinking: boolean = false): Electron.NativeImage {
-  const size = 22; // Стандартный размер для трея
+  const size = 22; // Standard tray icon size
   const canvas = createCanvas(size, size);
   const ctx = canvas.getContext('2d');
   
-  // Определяем цвет в зависимости от состояния
+  // Choose a color based on the current state
   let bgColor: string;
   const textColor = '#FFFFFF';
   
   if (isBlinking) {
-    // Мигание: красный
+    // Red while blinking
     bgColor = '#FF0000';
   } else {
-    // Приглушенный синий фон (соответствует цвету фона окна)
+    // Muted blue background matching the window
     bgColor = '#5b7fa6';
   }
   
-  // Рисуем фон
+  // Draw the background
   ctx.fillStyle = bgColor;
   ctx.fillRect(0, 0, size, size);
   
-  // Подбираем размер шрифта в зависимости от длины текста
-  const maxWidth = size - 4; // Оставляем отступы по 2px с каждой стороны
-  let fontSize = 14; // Начальный размер шрифта
+  // Choose a font size based on the text length
+  const maxWidth = size - 4; // Leave 2px of padding on each side
+  let fontSize = 14; // Initial font size
   let textWidth = 0;
   
-  // Уменьшаем размер шрифта, пока текст не влезет
+  // Reduce the font size until the text fits
   do {
     ctx.font = `bold ${fontSize}px Arial`;
     const metrics = ctx.measureText(text);
@@ -200,18 +200,18 @@ function createTextIcon(text: string, isBlinking: boolean = false): Electron.Nat
     }
   } while (textWidth > maxWidth && fontSize > 6);
   
-  // Рисуем текст
+  // Draw the text
   ctx.fillStyle = textColor;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillText(text, size / 2, size / 2);
   
-  // Конвертируем canvas в buffer
+  // Convert the canvas to a buffer
   const buffer = canvas.toBuffer('image/png');
   return nativeImage.createFromBuffer(buffer);
 }
 
-/** Момент срабатывания в календарный день (year/month/day) в таймзоне tz. */
+/** Alarm instant for a calendar date (year/month/day) in time zone tz. */
 function getAlarmTimestampOnCalendarDay(
   alarm: Alarm,
   tz: string,
@@ -261,21 +261,21 @@ function formatTimeForTray(seconds: number): string {
     return `${mins}m`;
   }
   
-  // Для больших значений показываем в часах с округлением
+  // Show larger values as rounded hours
   const hours = seconds / 3600;
   const roundedHours = Math.round(hours);
   
-  // Если округленное значение равно исходному (целое число), показываем без десятичной части
+  // Omit the decimal part when the rounded value is already an integer
   if (roundedHours === hours) {
     return `${roundedHours}h`;
   }
   
-  // Иначе показываем округленное значение
+  // Otherwise, show the rounded value
   return `${roundedHours}h`;
 }
 
 function formatTimeForTooltip(seconds: number): string {
-  if (seconds <= 0) return '0с';
+  if (seconds <= 0) return '0s';
   
   const hours = Math.floor(seconds / 3600);
   const minutes = Math.floor((seconds % 3600) / 60);
@@ -283,13 +283,13 @@ function formatTimeForTooltip(seconds: number): string {
   
   const parts: string[] = [];
   if (hours > 0) {
-    parts.push(`${hours}ч`);
+    parts.push(`${hours}h`);
   }
   if (minutes > 0) {
-    parts.push(`${minutes}м`);
+    parts.push(`${minutes}m`);
   }
   if (secs > 0 || parts.length === 0) {
-    parts.push(`${secs}с`);
+    parts.push(`${secs}s`);
   }
   
   return parts.join(' ');
@@ -302,9 +302,9 @@ function updateTrayIcon(): void {
   let tooltipText: string;
   
   if (isAlarmActive) {
-    // Мигание: красная иконка с восклицательным знаком
+    // Blink a red icon with an exclamation mark
     icon = createTextIcon('!', isBlinking);
-    tooltipText = '⏰ Будильник!';
+    tooltipText = '⏰ Alarm!';
   } else {
     const nearestAlarm = getNearestAlarm();
     
@@ -314,10 +314,10 @@ function updateTrayIcon(): void {
       icon = createTextIcon(text, false);
       
       const alarmTime = `${String(nearestAlarm.hour).padStart(2, '0')}:${String(nearestAlarm.minute).padStart(2, '0')}:${String(nearestAlarm.second).padStart(2, '0')}`;
-      tooltipText = `Будильник: ${alarmTime} (через ${formatTimeForTooltip(timeUntil)})`;
+      tooltipText = `Alarm: ${alarmTime} (in ${formatTimeForTooltip(timeUntil)})`;
     } else {
       icon = createTextIcon('—', false);
-      tooltipText = 'Будильник не установлен';
+      tooltipText = 'No alarm set';
     }
   }
   
@@ -327,12 +327,12 @@ function updateTrayIcon(): void {
 
 function formatTimeForCountdownWindow(seconds: number): string {
   if (seconds <= 0) return '—';
-  if (seconds < 60) return '< 1м';
+  if (seconds < 60) return '< 1m';
   const hours = Math.floor(seconds / 3600);
   const minutes = Math.floor((seconds % 3600) / 60);
   const parts: string[] = [];
-  if (hours > 0) parts.push(`${hours}ч`);
-  parts.push(`${minutes}м`);
+  if (hours > 0) parts.push(`${hours}h`);
+  parts.push(`${minutes}m`);
   return parts.join(' ');
 }
 
@@ -437,7 +437,7 @@ function startBlinking(): void {
   blinkInterval = setInterval(() => {
     isBlinking = !isBlinking;
     updateTrayIcon();
-  }, 500); // Мигание каждые 500мс
+  }, 500); // Blink every 500 ms
 }
 
 function stopBlinking(): void {
@@ -456,7 +456,7 @@ function checkAlarms(): void {
   const currentDate = `${local.year}-${String(local.month).padStart(2, '0')}-${String(local.day).padStart(2, '0')}`;
   const nowMs = Date.now();
 
-  // Сбрасываем множество сработавших будильников при смене дня
+  // Reset the set of triggered alarms when the day changes
   if (lastTriggeredDate !== currentDate) {
     triggeredAlarmsToday.clear();
     lastTriggeredDate = currentDate;
@@ -465,11 +465,11 @@ function checkAlarms(): void {
   for (const alarm of alarms) {
     if (!alarm.enabled) continue;
 
-    // Проверяем, не сработал ли уже этот будильник сегодня (только для повторяющихся)
+    // For recurring alarms, check whether this alarm has already fired today
     if (alarm.recurring && triggeredAlarmsToday.has(alarm.id)) continue;
 
     const fireTs = getAlarmTimestampOnCalendarDay(alarm, tz, local.year, local.month, local.day);
-    // Текущее время ≥ целевого: не пропускаем срабатывание при задержке event loop или после сна ОС
+    // Fire if the target time has passed, even after an event loop delay or system sleep
     if (nowMs < fireTs) continue;
 
     triggerAlarm(alarm);
@@ -489,31 +489,31 @@ function checkAlarms(): void {
 }
 
 function triggerAlarm(alarm: Alarm): void {
-  // Запускаем мигание иконки
+  // Start blinking the tray icon
   isAlarmActive = true;
   startBlinking();
   
-  // Показываем уведомление
+  // Show a notification
   if (Notification.isSupported()) {
     const notification = new Notification({
-      title: '⏰ Будильник!',
-      body: `Время: ${String(alarm.hour).padStart(2, '0')}:${String(alarm.minute).padStart(2, '0')}:${String(alarm.second).padStart(2, '0')}`,
+      title: '⏰ Alarm!',
+      body: `Time: ${String(alarm.hour).padStart(2, '0')}:${String(alarm.minute).padStart(2, '0')}:${String(alarm.second).padStart(2, '0')}`,
       urgency: 'critical',
     });
     
-    // Останавливаем звук и мигание при закрытии уведомления
+    // Stop the sound and blinking when the notification closes
     notification.on('close', () => {
       stopBlinking();
-      // Отправляем сообщение в renderer для остановки звука
+      // Tell the renderer to stop the sound
       if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.webContents.send('alarm-dismiss-from-main');
       }
     });
     
-    // Останавливаем звук и мигание при клике на уведомление
+    // Stop the sound and blinking when the notification is clicked
     notification.on('click', () => {
       stopBlinking();
-      // Отправляем сообщение в renderer для остановки звука
+      // Tell the renderer to stop the sound
       if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.webContents.send('alarm-dismiss-from-main');
       }
@@ -522,13 +522,13 @@ function triggerAlarm(alarm: Alarm): void {
     notification.show();
   }
   
-  // Показываем окно если оно скрыто
+  // Show the window if it is hidden
   if (mainWindow && !mainWindow.isVisible()) {
     mainWindow.show();
     mainWindow.focus();
   }
   
-  // Отправляем событие в renderer
+  // Send an event to the renderer
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send('alarm-triggered', alarm.id);
   }
@@ -537,10 +537,10 @@ function triggerAlarm(alarm: Alarm): void {
 function startAlarmChecker(): void {
   if (alarmCheckInterval) return;
   
-  // Проверяем каждую секунду
+  // Check once per second
   alarmCheckInterval = setInterval(() => {
     checkAlarms();
-    updateTrayIcon(); // Обновляем иконку трея с актуальным временем
+    updateTrayIcon(); // Update the tray icon with the latest time
     updateCountdownWindow();
   }, 1000);
 }
@@ -557,12 +557,12 @@ function createAppIcon(): Electron.NativeImage {
   const canvas = createCanvas(size, size);
   const ctx = canvas.getContext('2d');
   
-  // Градиентный фон (приглушенный синий)
+  // Muted blue gradient background
   const gradient = ctx.createLinearGradient(0, 0, size, size);
   gradient.addColorStop(0, '#5b7fa6');
   gradient.addColorStop(1, '#4a6fa5');
   
-  // Рисуем закругленный прямоугольник
+  // Draw the rounded rectangle
   const radius = size * 0.15;
   ctx.fillStyle = gradient;
   ctx.beginPath();
@@ -578,12 +578,12 @@ function createAppIcon(): Electron.NativeImage {
   ctx.closePath();
   ctx.fill();
   
-  // Рисуем иконку будильника
+  // Draw the alarm clock icon
   ctx.strokeStyle = '#FFFFFF';
   ctx.fillStyle = '#FFFFFF';
   ctx.lineWidth = size * 0.03;
   
-  // Циферблат
+  // Draw the clock face
   const centerX = size / 2;
   const centerY = size / 2;
   const clockRadius = size * 0.3;
@@ -592,14 +592,14 @@ function createAppIcon(): Electron.NativeImage {
   ctx.arc(centerX, centerY, clockRadius, 0, 2 * Math.PI);
   ctx.stroke();
   
-  // Стрелки часов (показывают 7:00 - время будильника)
+  // Clock hands showing 7:00
   const hourAngle = (7 * 30 - 90) * (Math.PI / 180);
   const minuteAngle = (0 * 6 - 90) * (Math.PI / 180);
   
   const hourLength = clockRadius * 0.5;
   const minuteLength = clockRadius * 0.7;
   
-  // Часовая стрелка
+  // Hour hand
   ctx.beginPath();
   ctx.moveTo(centerX, centerY);
   ctx.lineTo(
@@ -609,7 +609,7 @@ function createAppIcon(): Electron.NativeImage {
   ctx.lineWidth = size * 0.04;
   ctx.stroke();
   
-  // Минутная стрелка
+  // Minute hand
   ctx.beginPath();
   ctx.moveTo(centerX, centerY);
   ctx.lineTo(
@@ -619,12 +619,12 @@ function createAppIcon(): Electron.NativeImage {
   ctx.lineWidth = size * 0.025;
   ctx.stroke();
   
-  // Центральная точка
+  // Center dot
   ctx.beginPath();
   ctx.arc(centerX, centerY, size * 0.02, 0, 2 * Math.PI);
   ctx.fill();
   
-  // Конвертируем canvas в buffer
+  // Convert the canvas to a buffer
   const buffer = canvas.toBuffer('image/png');
   return nativeImage.createFromBuffer(buffer);
 }
@@ -632,12 +632,12 @@ function createAppIcon(): Electron.NativeImage {
 function createWindow(): void {
   const appIcon = createAppIcon();
   
-  // Получаем основной монитор
+  // Get the primary display
   const primaryDisplay = screen.getPrimaryDisplay();
   const { width, height } = primaryDisplay.workAreaSize;
   const { x, y } = primaryDisplay.workArea;
   
-  // Вычисляем позицию для центрирования окна на основном мониторе
+  // Calculate the position that centers the window on the primary display
   const windowWidth = 800;
   const windowHeight = 900;
   const windowX = x + Math.floor((width - windowWidth) / 2);
@@ -654,25 +654,25 @@ function createWindow(): void {
       contextIsolation: true,
       preload: path.join(__dirname, 'preload.js'),
     },
-    show: false, // Всегда запускаем приложение свернутым
+    show: false, // Always start the app hidden
   });
 
   mainWindow.loadFile(path.join(__dirname, 'index.html'));
 
-  // Скрываем окно после загрузки
+  // Hide the window after it loads
   mainWindow.once('ready-to-show', () => {
     if (mainWindow) {
       mainWindow.hide();
     }
   });
 
-  // Отправляем загруженные будильники в renderer после загрузки страницы
+  // Send the loaded alarms to the renderer after the page loads
   mainWindow.webContents.once('did-finish-load', () => {
     sendAlarmsToRenderer();
     sendCountdownWindowState();
   });
 
-  // Обработка закрытия окна - сворачиваем в tray вместо закрытия
+  // Hide the window to the tray instead of quitting when it closes
   mainWindow.on('close', (event) => {
     if (!app.isQuitting) {
       event.preventDefault();
@@ -689,13 +689,13 @@ function createWindow(): void {
 }
 
 function createTray(): void {
-  // Начальная иконка с прочерком
+  // Start with a dash icon
   tray = new Tray(createTextIcon('—', false));
 
   updateTrayMenu();
   updateTrayIcon();
 
-  // ЛКМ по иконке: показать/скрыть окно
+  // Left-click the tray icon to show or hide the window
   tray.on('click', () => {
     if (!mainWindow) return;
     if (mainWindow.isVisible()) {
@@ -707,7 +707,7 @@ function createTray(): void {
     updateTrayMenu();
   });
 
-  // Двойной клик по иконке также показывает окно
+  // Double-click the tray icon to show the window
   tray.on('double-click', () => {
     mainWindow?.show();
     mainWindow?.focus();
@@ -715,7 +715,7 @@ function createTray(): void {
   });
 }
 
-// Функция инициализации приложения
+// Initialize the application
 function initializeApp(): void {
   const store = createSettingsStore({
     isPackaged: app.isPackaged,
@@ -725,7 +725,7 @@ function initializeApp(): void {
     overridePath: process.env.ALARM_SETTINGS_PATH,
   });
   settingsStore = store;
-  // Загружаем настройки из файла при запуске
+  // Load settings at startup
   const settings = store.load();
   alarms = settings.alarms;
   countdownWindowVisiblePref = settings.countdownWindowVisible;
@@ -770,17 +770,17 @@ function initializeApp(): void {
   });
 }
 
-// Обеспечиваем, что только один экземпляр приложения может быть запущен (если включено)
+// Enforce single-instance mode when enabled
 if (ALLOW_ONLY_ONE_INSTANCE) {
   const gotTheLock = app.requestSingleInstanceLock();
 
   if (!gotTheLock) {
-    // Если другой экземпляр уже запущен, закрываем этот
+    // Quit if another instance is already running
     app.quit();
   } else {
-    // Обрабатываем попытку запуска второго экземпляра
+    // Handle attempts to start a second instance
     app.on('second-instance', () => {
-      // Если пользователь пытается запустить второй экземпляр, показываем существующее окно
+      // Show the existing window when the user starts another instance
       if (mainWindow) {
         if (mainWindow.isMinimized()) mainWindow.restore();
         mainWindow.show();
@@ -793,7 +793,7 @@ if (ALLOW_ONLY_ONE_INSTANCE) {
     });
   }
 } else {
-  // Если разрешено несколько экземпляров, запускаем приложение без проверки блокировки
+  // Start without a single-instance lock when multiple instances are allowed
   app.whenReady().then(() => {
     initializeApp();
   });
@@ -806,8 +806,8 @@ function sendAlarmsToRenderer(): void {
 }
 
 app.on('window-all-closed', () => {
-  // Не закрываем приложение при закрытии всех окон
-  // Оно будет работать в tray
+  // Keep the app running after all windows close
+  // The app continues running in the system tray
 });
 
 app.on('before-quit', () => {

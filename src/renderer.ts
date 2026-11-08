@@ -1,4 +1,4 @@
-// Типы для electronAPI
+// Types for the Electron API
 interface Alarm {
   id: string;
   hour: number;
@@ -43,7 +43,7 @@ let timeTimezoneInterval: ReturnType<typeof setInterval> | null = null;
 function updateTimeTimezoneDisplay(): void {
   const el = document.getElementById('currentTimeTimezone');
   if (!el || !currentTimezoneInfo) return;
-  const formatter = new Intl.DateTimeFormat('ru', {
+  const formatter = new Intl.DateTimeFormat('en-GB', {
     timeZone: currentTimezoneInfo.effective,
     hour: '2-digit',
     minute: '2-digit',
@@ -51,7 +51,7 @@ function updateTimeTimezoneDisplay(): void {
   });
   const timeStr = formatter.format(new Date());
   const tzLabel = currentTimezoneInfo.isSystem
-    ? `Системная таймзона: ${currentTimezoneInfo.effective}`
+    ? `System time zone: ${currentTimezoneInfo.effective}`
     : ` ${currentTimezoneInfo.effective}`;
   el.textContent = `${timeStr} (${tzLabel})`;
 }
@@ -64,7 +64,7 @@ function formatTime(hour: number, minute: number, second: number): string {
   return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:${String(second).padStart(2, '0')}`;
 }
 
-// Текущие локальные дата и время в указанной таймзоне (для расчёта «через …»)
+// Current local date and time in the specified time zone, used for relative alarm times
 function getLocalTimeInTimezone(tz: string): { year: number; month: number; day: number; hour: number; minute: number; second: number } {
   const now = new Date();
   const formatter = new Intl.DateTimeFormat('en-CA', {
@@ -92,7 +92,7 @@ function getLocalTimeInTimezone(tz: string): { year: number; month: number; day:
   };
 }
 
-// UTC-метка момента (year, month, day, hour, minute, second) в таймзоне tz
+// UTC timestamp for the given date and time in time zone tz
 function getTimestampInTimezone(tz: string, year: number, month: number, day: number, hour: number, minute: number, second: number): number {
   const formatter = new Intl.DateTimeFormat('en-CA', {
     timeZone: tz,
@@ -115,14 +115,14 @@ function getTimestampInTimezone(tz: string, year: number, month: number, day: nu
   return Date.UTC(year, month - 1, day, hour, minute, second) - offsetMs;
 }
 
-/** Сдвиг календарной даты в григорианском календаре. `Date.UTC` — только нормализация (переходы месяца/года), не системная таймзона. */
+/** Shift a Gregorian calendar date. Date.UTC normalizes month/year boundaries without using the system time zone. */
 function addGregorianCalendarDays(year: number, month: number, day: number, deltaDays: number): { year: number; month: number; day: number } {
   const ms = Date.UTC(year, month - 1, day + deltaDays);
   const d = new Date(ms);
   return { year: d.getUTCFullYear(), month: d.getUTCMonth() + 1, day: d.getUTCDate() };
 }
 
-// Локальные час, минута, секунда в таймзоне tz для заданной UTC-метки (для кнопок «через …»)
+// Local time in time zone tz for a UTC timestamp, used by the quick-set buttons
 function getLocalTimeFromTimestamp(tz: string, timestamp: number): { hour: number; minute: number; second: number } {
   const formatter = new Intl.DateTimeFormat('en-CA', {
     timeZone: tz,
@@ -152,26 +152,26 @@ function getTimeUntilAlarm(alarm: Alarm): number {
 }
 
 function formatTimeUntil(seconds: number): string {
-  if (seconds <= 0) return 'Сейчас';
-  if (seconds < 60) return `через ${seconds}с`;
+  if (seconds <= 0) return 'Now';
+  if (seconds < 60) return `in ${seconds}s`;
   
   const mins = Math.floor(seconds / 60);
   if (mins < 60) {
-    return `через ${mins}м`;
+    return `in ${mins}m`;
   }
   
   const hours = Math.floor(seconds / 3600);
   const remainingMins = Math.floor((seconds % 3600) / 60);
   
   if (remainingMins === 0) {
-    return `через ${hours}ч`;
+    return `in ${hours}h`;
   }
-  return `через ${hours}ч ${remainingMins}м`;
+  return `in ${hours}h ${remainingMins}m`;
 }
 
 function hasAlarmAtTime(hour: number, minute: number, second: number, excludeAlarmId?: string): boolean {
   return alarms.some(alarm => {
-    // Пропускаем будильник, который редактируется
+    // Skip the alarm currently being edited
     if (excludeAlarmId && alarm.id === excludeAlarmId) {
       return false;
     }
@@ -180,9 +180,9 @@ function hasAlarmAtTime(hour: number, minute: number, second: number, excludeAla
 }
 
 function updateTimeUntilForAlarms(): void {
-  // Обновляем только время до срабатывания для будильников, не находящихся в режиме редактирования
+  // Update countdowns only for alarms that are not being edited
   alarms.forEach(alarm => {
-    if (alarm.id === editingAlarmId) return; // Пропускаем редактируемый будильник
+    if (alarm.id === editingAlarmId) return; // Skip the alarm currently being edited
     
     const alarmItem = document.querySelector(`.alarm-item[data-id="${alarm.id}"]`);
     if (!alarmItem) return;
@@ -195,7 +195,7 @@ function updateTimeUntilForAlarms(): void {
       if (timeUntilElement) {
         timeUntilElement.textContent = timeUntilStr;
       } else {
-        // Если элемента нет, но будильник включен, добавляем его
+        // Add the countdown element if the alarm is enabled and it is missing
         const timeGroup = alarmItem.querySelector('.alarm-time-group');
         if (timeGroup) {
           const timeUntilSpan = document.createElement('span');
@@ -205,7 +205,7 @@ function updateTimeUntilForAlarms(): void {
         }
       }
     } else {
-      // Если будильник выключен, удаляем элемент времени до срабатывания
+      // Remove the countdown when the alarm is disabled
       if (timeUntilElement) {
         timeUntilElement.remove();
       }
@@ -214,26 +214,26 @@ function updateTimeUntilForAlarms(): void {
 }
 
 function setupTimeInputHandlers(input: HTMLInputElement): void {
-  // Проверяем, не добавлены ли уже обработчики (используя data-атрибут)
+  // Avoid registering duplicate handlers by checking the data property
   if ((input as any).__timeHandlersSetup) {
-    return; // Обработчики уже добавлены
+    return; // Handlers are already registered
   }
   
-  // При фокусе очищаем поле, если значение "0" или "00"
+  // Clear the field on focus when its value is "0" or "00"
   input.addEventListener('focus', function focusHandler() {
     if (this.value === '0' || this.value === '00') {
       this.value = '';
     }
   });
   
-  // При потере фокуса, если поле пустое, устанавливаем "0"
+  // Set the value to "0" on blur if the field is empty
   input.addEventListener('blur', function blurHandler() {
     if (this.value === '' || this.value.trim() === '') {
       this.value = '0';
     }
   });
   
-  // Помечаем, что обработчики добавлены
+  // Mark the handlers as registered
   (input as any).__timeHandlersSetup = true;
 }
 
@@ -241,7 +241,7 @@ function renderAlarms(): void {
   const container = document.getElementById('alarmsList');
   if (!container) return;
 
-  // Сохраняем значения полей редактирования и информацию о фокусе перед перерисовкой
+  // Save edit field values and focus before rerendering
   let editingValues: { hour: string; minute: string; second: string; focusedField: string | null } | null = null;
   if (editingAlarmId) {
     const hourInput = document.getElementById(`edit-hour-${editingAlarmId}`) as HTMLInputElement;
@@ -249,7 +249,7 @@ function renderAlarms(): void {
     const secondInput = document.getElementById(`edit-second-${editingAlarmId}`) as HTMLInputElement;
     
     if (hourInput && minuteInput && secondInput) {
-      // Определяем, какое поле имеет фокус
+      // Find which field has focus
       let focusedField: string | null = null;
       if (document.activeElement === hourInput) {
         focusedField = 'hour';
@@ -259,7 +259,7 @@ function renderAlarms(): void {
         focusedField = 'second';
       }
       
-      // Сохраняем позицию курсора
+      // Save the cursor position
       const activeElement = document.activeElement as HTMLInputElement;
       const cursorPosition = activeElement && (activeElement === hourInput || activeElement === minuteInput || activeElement === secondInput) 
         ? activeElement.selectionStart 
@@ -276,11 +276,11 @@ function renderAlarms(): void {
   }
 
   if (alarms.length === 0) {
-    container.innerHTML = '<div class="no-alarms">Нет установленных будильников</div>';
+    container.innerHTML = '<div class="no-alarms">No alarms set</div>';
     return;
   }
 
-  // Сортируем будильники по времени
+  // Sort alarms by time
   const sortedAlarms = [...alarms].sort((a, b) => {
     if (a.hour !== b.hour) return a.hour - b.hour;
     if (a.minute !== b.minute) return a.minute - b.minute;
@@ -292,7 +292,7 @@ function renderAlarms(): void {
     const timeStr = formatTime(alarm.hour, alarm.minute, alarm.second);
     
     if (isEditing) {
-      // Используем сохраненные значения, если они есть, иначе значения из будильника
+      // Use saved field values when available, otherwise use the alarm values
       const hourValue = editingValues ? editingValues.hour : alarm.hour;
       const minuteValue = editingValues ? editingValues.minute : alarm.minute;
       const secondValue = editingValues ? editingValues.second : alarm.second;
@@ -307,17 +307,17 @@ function renderAlarms(): void {
             <input type="number" min="0" max="59" value="${secondValue}" class="second-input" id="edit-second-${alarm.id}">
           </div>
           <div class="quick-time-links">
-            <a href="#" class="quick-time-link" onclick="setQuickTimeSecondsForEdit('${alarm.id}', 30); return false;">через 30 секунд</a>
-            <a href="#" class="quick-time-link" onclick="setQuickTimeSecondsForEdit('${alarm.id}', 60); return false;">через 1 минуту</a>
-            <a href="#" class="quick-time-link" onclick="setQuickTimeForEdit('${alarm.id}', 2); return false;">через 2 минуты</a>
-            <a href="#" class="quick-time-link" onclick="setQuickTimeForEdit('${alarm.id}', 5); return false;">через 5 минут</a>
-            <a href="#" class="quick-time-link" onclick="setQuickTimeForEdit('${alarm.id}', 30); return false;">через 30 минут</a>
-            <a href="#" class="quick-time-link" onclick="setQuickTimeForEdit('${alarm.id}', 60); return false;">через 1 час</a>
-            <a href="#" class="quick-time-link" onclick="setQuickTimeForEdit('${alarm.id}', 120); return false;">через 2 часа</a>
+            <a href="#" class="quick-time-link" onclick="setQuickTimeSecondsForEdit('${alarm.id}', 30); return false;">in 30 seconds</a>
+            <a href="#" class="quick-time-link" onclick="setQuickTimeSecondsForEdit('${alarm.id}', 60); return false;">in 1 minute</a>
+            <a href="#" class="quick-time-link" onclick="setQuickTimeForEdit('${alarm.id}', 2); return false;">in 2 minutes</a>
+            <a href="#" class="quick-time-link" onclick="setQuickTimeForEdit('${alarm.id}', 5); return false;">in 5 minutes</a>
+            <a href="#" class="quick-time-link" onclick="setQuickTimeForEdit('${alarm.id}', 30); return false;">in 30 minutes</a>
+            <a href="#" class="quick-time-link" onclick="setQuickTimeForEdit('${alarm.id}', 60); return false;">in 1 hour</a>
+            <a href="#" class="quick-time-link" onclick="setQuickTimeForEdit('${alarm.id}', 120); return false;">in 2 hours</a>
           </div>
           <div class="alarm-actions">
-            <button class="btn-save" onclick="saveAlarm('${alarm.id}')">Сохранить</button>
-            <button class="btn-cancel" onclick="cancelEdit('${alarm.id}')">Отмена</button>
+            <button class="btn-save" onclick="saveAlarm('${alarm.id}')">Save</button>
+            <button class="btn-cancel" onclick="cancelEdit('${alarm.id}')">Cancel</button>
           </div>
         </div>
       `;
@@ -334,31 +334,31 @@ function renderAlarms(): void {
             </div>
             <div class="alarm-toggles">
               <div class="toggle-group">
-                <label class="alarm-toggle with-label" title="Включить/выключить будильник">
+                <label class="alarm-toggle with-label" title="Enable/disable alarm">
                   <input type="checkbox" ${alarm.enabled ? 'checked' : ''} onchange="toggleAlarm('${alarm.id}', this.checked)">
                   <span class="toggle-slider"></span>
                 </label>
-                <span class="toggle-label">Вкл</span>
+                <span class="toggle-label">On</span>
               </div>
               <div class="toggle-group">
-                <label class="alarm-toggle recurring-toggle with-label" title="Повторяющийся будильник">
+                <label class="alarm-toggle recurring-toggle with-label" title="Recurring alarm">
                   <input type="checkbox" ${alarm.recurring ? 'checked' : ''} onchange="toggleRecurring('${alarm.id}', this.checked)">
                   <span class="toggle-slider"></span>
                 </label>
-                <span class="toggle-label">Повтор</span>
+                <span class="toggle-label">Repeat</span>
               </div>
             </div>
           </div>
           <div class="alarm-actions">
-            <button class="btn-edit" onclick="editAlarm('${alarm.id}')">Редактировать</button>
-            <button class="btn-delete" onclick="deleteAlarm('${alarm.id}')">Удалить</button>
+            <button class="btn-edit" onclick="editAlarm('${alarm.id}')">Edit</button>
+            <button class="btn-delete" onclick="deleteAlarm('${alarm.id}')">Delete</button>
           </div>
         </div>
       `;
     }
   }).join('');
 
-  // Восстанавливаем фокус и позицию курсора после перерисовки
+  // Restore focus and cursor position after rerendering
   if (editingAlarmId && editingValues && editingValues.focusedField) {
     setTimeout(() => {
       let inputToFocus: HTMLInputElement | null = null;
@@ -371,17 +371,17 @@ function renderAlarms(): void {
       }
       
       if (inputToFocus) {
-        // Настраиваем обработчики для полей редактирования
+        // Set up handlers for the edit fields
         setupTimeInputHandlers(inputToFocus);
         inputToFocus.focus();
-        // Восстанавливаем позицию курсора
+        // Restore the cursor position
         const cursorPos = (editingValues as any).cursorPosition;
         if (cursorPos !== null && cursorPos !== undefined) {
           inputToFocus.setSelectionRange(cursorPos, cursorPos);
         }
       }
       
-      // Настраиваем обработчики для всех полей редактирования
+      // Set up handlers for all edit fields
       const hourInput = document.getElementById(`edit-hour-${editingAlarmId}`) as HTMLInputElement;
       const minuteInput = document.getElementById(`edit-minute-${editingAlarmId}`) as HTMLInputElement;
       const secondInput = document.getElementById(`edit-second-${editingAlarmId}`) as HTMLInputElement;
@@ -473,23 +473,23 @@ function addAlarm(): void {
   const second = parseInt(secondInput.value, 10);
 
   if (isNaN(hour) || hour < 0 || hour > 23) {
-    alert('Введите корректный час (0-23)');
+    alert('Enter a valid hour (0–23)');
     return;
   }
 
   if (isNaN(minute) || minute < 0 || minute > 59) {
-    alert('Введите корректные минуты (0-59)');
+    alert('Enter valid minutes (0–59)');
     return;
   }
 
   if (isNaN(second) || second < 0 || second > 59) {
-    alert('Введите корректные секунды (0-59)');
+    alert('Enter valid seconds (0–59)');
     return;
   }
 
-  // Проверяем, нет ли уже будильника с таким же временем
+  // Check whether an alarm already exists at this time
   if (hasAlarmAtTime(hour, minute, second)) {
-    alert('Будильник на это время уже существует!');
+    alert('An alarm is already set for this time!');
     return;
   }
 
@@ -510,7 +510,7 @@ function addAlarm(): void {
     electronAPI.addAlarm(newAlarm);
   }
 
-  // Сбрасываем поля ввода
+  // Reset the input fields
   hourInput.value = '00';
   minuteInput.value = '00';
   secondInput.value = '00';
@@ -523,7 +523,7 @@ function editAlarm(alarmId: string): void {
   editingAlarmId = alarmId;
   renderAlarms();
   
-  // Настраиваем обработчики для полей редактирования после перерисовки
+  // Set up handlers for the edit fields after rerendering
   setTimeout(() => {
     const hourInput = document.getElementById(`edit-hour-${alarmId}`) as HTMLInputElement;
     const minuteInput = document.getElementById(`edit-minute-${alarmId}`) as HTMLInputElement;
@@ -547,42 +547,42 @@ function saveAlarm(alarmId: string): void {
 
   if (!hourInput || !minuteInput || !secondInput) return;
 
-  // Если поле пустое, используем 0
+  // Treat an empty field as 0
   const hour = hourInput.value === '' ? 0 : parseInt(hourInput.value, 10);
   const minute = minuteInput.value === '' ? 0 : parseInt(minuteInput.value, 10);
   const second = secondInput.value === '' ? 0 : parseInt(secondInput.value, 10);
 
   if (isNaN(hour) || hour < 0 || hour > 23) {
-    alert('Введите корректный час (0-23)');
+    alert('Enter a valid hour (0–23)');
     return;
   }
 
   if (isNaN(minute) || minute < 0 || minute > 59) {
-    alert('Введите корректные минуты (0-59)');
+    alert('Enter valid minutes (0–59)');
     return;
   }
 
   if (isNaN(second) || second < 0 || second > 59) {
-    alert('Введите корректные секунды (0-59)');
+    alert('Enter valid seconds (0–59)');
     return;
   }
 
   const alarm = alarms.find(a => a.id === alarmId);
   if (!alarm) return;
 
-  // Проверяем, нет ли уже другого будильника с таким же временем
+  // Check whether another alarm already exists at this time
   if (hasAlarmAtTime(hour, minute, second, alarmId)) {
-    alert('Будильник на это время уже существует!');
+    alert('An alarm is already set for this time!');
     return;
   }
 
-  // При редактировании сохраняем текущее значение recurring (не меняем его)
+  // Preserve the current recurring setting while editing
   const updatedAlarm: Alarm = {
     ...alarm,
     hour,
     minute,
     second,
-    // recurring остается без изменений
+    // Keep the recurring value unchanged
   };
 
   const electronAPI = (window as any).electronAPI as ElectronAPI | undefined;
@@ -594,7 +594,7 @@ function saveAlarm(alarmId: string): void {
 }
 
 function deleteAlarm(alarmId: string): void {
-  if (!confirm('Вы уверены, что хотите удалить этот будильник?')) {
+  if (!confirm('Are you sure you want to delete this alarm?')) {
     return;
   }
 
@@ -635,7 +635,7 @@ function toggleRecurring(alarmId: string, recurring: boolean): void {
 }
 
 function playAlarmSound(): void {
-  // Создаем звуковой сигнал с помощью Web Audio API
+  // Create the alarm sound with the Web Audio API
   try {
     const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
     audioContext = new AudioContextClass();
@@ -649,7 +649,7 @@ function playAlarmSound(): void {
       oscillator.connect(gainNode);
       gainNode.connect(audioContext.destination);
 
-      oscillator.frequency.value = 800; // Частота в Гц
+      oscillator.frequency.value = 800; // Frequency in Hz
       oscillator.type = 'sine';
 
       gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
@@ -659,17 +659,17 @@ function playAlarmSound(): void {
       oscillator.stop(audioContext.currentTime + 0.5);
     }
 
-    // Играем звук каждые 0.6 секунды
+    // Play the sound every 0.6 seconds
     isAlarmPlaying = true;
     playBeep();
     audioInterval = setInterval(() => {
-      // Проверяем, что звук должен играть и уведомление существует
+      // Check that playback is active and the notification exists
       if (audioContext && isAlarmPlaying) {
-        // Проверяем, что уведомление все еще активно (не закрыто)
+        // Check that the notification is still active
         if (alarmNotification) {
           playBeep();
         } else {
-          // Уведомление было закрыто, останавливаем звук
+          // The notification was closed, so stop the sound
           stopAlarmSound();
         }
       } else {
@@ -677,7 +677,7 @@ function playAlarmSound(): void {
       }
     }, 600);
   } catch (e) {
-    console.error('Ошибка воспроизведения звука:', e);
+    console.error('Could not play alarm sound:', e);
   }
 }
 
@@ -693,7 +693,7 @@ function stopAlarmSound(): void {
   }
   if (audioContext) {
     audioContext.close().catch(() => {
-      // Игнорируем ошибки при закрытии
+      // Ignore errors during close
     });
     audioContext = null;
   }
@@ -714,7 +714,7 @@ function updateDismissButton(): void {
 function dismissAlarm(): void {
   stopAlarmSound();
   
-  // Останавливаем мигание иконки в трее
+  // Stop blinking the tray icon
   const electronAPI = (window as any).electronAPI as ElectronAPI | undefined;
   if (electronAPI) {
     electronAPI.dismissAlarm();
@@ -722,75 +722,75 @@ function dismissAlarm(): void {
 }
 
 function showAlarmNotification(alarm: Alarm): void {
-  // Запрашиваем разрешение на уведомления
+  // Request notification permission
   if (Notification.permission === 'default') {
     Notification.requestPermission();
   }
 
   if (Notification.permission === 'granted') {
     const timeStr = formatTime(alarm.hour, alarm.minute, alarm.second);
-    alarmNotification = new Notification('⏰ Будильник!', {
-      body: `Время: ${timeStr}`,
+    alarmNotification = new Notification('⏰ Alarm!', {
+      body: `Time: ${timeStr}`,
       requireInteraction: true,
       tag: 'alarm-alert'
     });
 
-    // Функция для обработки закрытия уведомления
+    // Handle notification dismissal
     const handleNotificationClose = () => {
-      console.log('Браузерное уведомление закрыто, останавливаем звук');
-      // Убеждаемся, что звук останавливается
+      console.log('Browser notification closed; stopping the sound');
+      // Ensure the sound stops
       if (isAlarmPlaying) {
         dismissAlarm();
       }
     };
 
-    // Функция для обработки клика по уведомлению
+    // Handle notification clicks
     const handleNotificationClick = () => {
-      console.log('Клик по браузерному уведомлению, останавливаем звук');
+      console.log('Browser notification clicked; stopping the sound');
       if (isAlarmPlaying) {
         dismissAlarm();
       }
       if (window.focus) window.focus();
     };
 
-    // Останавливаем звук и мигание когда уведомление закрыто
-    // Используем и addEventListener, и свойства для максимальной совместимости
+    // Stop the sound and blinking when the notification closes
+    // Use both addEventListener and event properties for compatibility
     try {
       alarmNotification.addEventListener('close', handleNotificationClose);
     } catch (e) {
-      console.warn('Не удалось добавить addEventListener для close:', e);
+      console.warn('Could not add a close event listener:', e);
     }
     
-    // Также используем свойство onclose (может работать в некоторых версиях Electron)
+    // Also set onclose for Electron versions that support it
     alarmNotification.onclose = handleNotificationClose;
 
-    // Останавливаем звук и мигание при клике на уведомление
+    // Stop the sound and blinking when the notification is clicked
     try {
       alarmNotification.addEventListener('click', handleNotificationClick);
     } catch (e) {
-      console.warn('Не удалось добавить addEventListener для click:', e);
+      console.warn('Could not add a click event listener:', e);
     }
     
     alarmNotification.onclick = handleNotificationClick;
     
-    // Дополнительная защита: используем событие error, если уведомление не может быть показано
+    // As a fallback, handle errors when the notification cannot be shown
     try {
       alarmNotification.addEventListener('error', (e) => {
-        console.error('Ошибка браузерного уведомления:', e);
+        console.error('Browser notification error:', e);
       });
     } catch (e) {
-      // Игнорируем ошибки при добавлении обработчика error
+      // Ignore errors while adding the error handler
     }
   } else {
-    // Если уведомления не разрешены, показываем alert
+    // Show an alert if notifications are unavailable
     const timeStr = formatTime(alarm.hour, alarm.minute, alarm.second);
-    alert(`⏰ Будильник! Время: ${timeStr}`);
-    // Останавливаем звук и мигание после закрытия alert
+    alert(`⏰ Alarm! Time: ${timeStr}`);
+    // Stop the sound and blinking after the alert closes
     dismissAlarm();
   }
 }
 
-// Экспортируем функции для глобального доступа
+// Expose functions for inline event handlers
 (window as any).addAlarm = addAlarm;
 (window as any).editAlarm = editAlarm;
 (window as any).cancelEdit = cancelEdit;
@@ -803,24 +803,24 @@ function showAlarmNotification(alarm: Alarm): void {
 (window as any).setQuickTimeForEdit = setQuickTimeForEdit;
 (window as any).setQuickTimeSecondsForEdit = setQuickTimeSecondsForEdit;
 
-// Инициализация при загрузке страницы
+// Initialize when the page loads
 document.addEventListener('DOMContentLoaded', () => {
-  // Запрашиваем разрешение на уведомления при загрузке
+  // Request notification permission on page load
   if (Notification.permission === 'default') {
     Notification.requestPermission();
   }
 
   const electronAPI = (window as any).electronAPI as ElectronAPI | undefined;
   if (electronAPI) {
-    // Состояние окна отсчёта времени
+    // Countdown window state
     electronAPI.onCountdownWindowState((visible: boolean) => {
       const btn = document.getElementById('countdownWindowBtn') as HTMLButtonElement;
       if (btn) {
-        btn.textContent = visible ? 'Скрыть окно отсчёта времени' : 'Показывать окно отсчёта времени';
+        btn.textContent = visible ? 'Hide Countdown Window' : 'Show Countdown Window';
       }
     });
 
-    // Время и таймзона в основном окне
+    // Display the current time and time zone in the main window
     electronAPI.getCurrentTimezone().then((info) => {
       currentTimezoneInfo = info;
       updateTimeTimezoneDisplay();
@@ -828,22 +828,22 @@ document.addEventListener('DOMContentLoaded', () => {
       timeTimezoneInterval = setInterval(updateTimeTimezoneDisplay, 60000);
     });
 
-    // Запрашиваем список будильников
+    // Request the alarm list
     electronAPI.getAllAlarms();
 
-    // Слушаем обновления будильников
+    // Listen for alarm updates
     electronAPI.onAlarmsUpdated((updatedAlarms) => {
       alarms = updatedAlarms;
       renderAlarms();
     });
 
-    // Запускаем обновление времени до срабатывания будильников каждую секунду
+    // Update alarm countdowns every second
     if (timeUpdateInterval) {
       clearInterval(timeUpdateInterval);
     }
     timeUpdateInterval = setInterval(() => {
-      // Если есть будильник в режиме редактирования, обновляем только время до срабатывания
-      // без полной перерисовки, чтобы не сбрасывать фокус
+      // If an alarm is being edited, update only its countdown
+      // Avoid a full rerender so focus is preserved
       if (editingAlarmId) {
         updateTimeUntilForAlarms();
       } else {
@@ -851,22 +851,22 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }, 1000);
 
-    // Слушаем срабатывание будильника
+    // Listen for triggered alarms
     electronAPI.onAlarmTriggered((alarmId) => {
       const alarm = alarms.find(a => a.id === alarmId);
       if (alarm) {
-        // Воспроизводим звук
+        // Play the alarm sound
         playAlarmSound();
         updateDismissButton();
-        // Показываем уведомление
+        // Show a notification
         showAlarmNotification(alarm);
       }
     });
 
-    // Слушаем сообщение от main процесса о закрытии нативного уведомления
+    // Listen for the main process closing a native notification
     electronAPI.onAlarmDismissFromMain(() => {
-      console.log('Получено сообщение от main процесса о закрытии нативного уведомления');
-      // Останавливаем звук
+      console.log('Received a message from the main process to close the native notification');
+      // Stop the sound
       isAlarmPlaying = false;
       if (audioInterval) {
         clearInterval(audioInterval);
@@ -876,23 +876,23 @@ document.addEventListener('DOMContentLoaded', () => {
         audioContext.close().catch(() => {});
         audioContext = null;
       }
-      // Закрываем браузерное уведомление, если оно активно
+      // Close the browser notification if it is still active
       if (alarmNotification) {
         try {
           alarmNotification.close();
         } catch (e) {
-          console.error('Ошибка при закрытии браузерного уведомления:', e);
+          console.error('Could not close browser notification:', e);
         }
         alarmNotification = null;
       }
-      // Обновляем кнопку
+      // Update the button
       updateDismissButton();
-      // Отправляем подтверждение обратно в main процесс (хотя это уже сделано через dismissAlarm)
-      // Но мы уже вызвали stopBlinking в main, так что просто обновляем состояние
+      // Acknowledge the main process (dismissAlarm has already done this)
+      // The main process already stopped blinking, so only update the UI
     });
   }
 
-  // Обработка Enter в полях ввода
+  // Handle Enter in the input fields
   const hourInput = document.getElementById('newHour') as HTMLInputElement;
   const minuteInput = document.getElementById('newMinute') as HTMLInputElement;
   const secondInput = document.getElementById('newSecond') as HTMLInputElement;
@@ -929,7 +929,7 @@ document.addEventListener('DOMContentLoaded', () => {
     addBtn.addEventListener('click', addAlarm);
   }
 
-  // Обработчики кнопок управления приложением
+  // Set up the app control buttons
   const countdownWindowBtn = document.getElementById('countdownWindowBtn');
   const minimizeBtn = document.getElementById('minimizeBtn');
   const closeBtn = document.getElementById('closeBtn');
@@ -952,7 +952,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   if (closeBtn) {
     closeBtn.addEventListener('click', () => {
-      const confirmed = confirm('Вы уверены, что хотите закрыть приложение?');
+      const confirmed = confirm('Are you sure you want to quit the application?');
       if (confirmed) {
         const electronAPI = (window as any).electronAPI as ElectronAPI | undefined;
         if (electronAPI) {
@@ -962,13 +962,13 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // Обработчик кнопки отключения звука будильника
+  // Handle the Dismiss Alarm button
   const dismissBtn = document.getElementById('dismissAlarmBtn');
   if (dismissBtn) {
     dismissBtn.addEventListener('click', dismissAlarm);
   }
 
-  // Окно выбора таймзоны
+  // Time zone selection dialog
   const timezoneBtn = document.getElementById('timezoneBtn');
   const timezoneModalOverlay = document.getElementById('timezoneModalOverlay');
   const timezoneList = document.getElementById('timezoneList');
@@ -986,7 +986,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const filtered = q
       ? allTimezones.filter(tz => tz.toLowerCase().includes(q))
       : allTimezones;
-    const systemLabel = 'Системная таймзона (по умолчанию)';
+    const systemLabel = 'System time zone (default)';
     const selected = selectedTimezoneValue;
     const systemSelected = selected === null ? ' selected' : '';
     let html = `<div class="tz-option system${systemSelected}" data-tz="">${systemLabel}</div>`;
@@ -1014,8 +1014,8 @@ document.addEventListener('DOMContentLoaded', () => {
     timezoneBtn.addEventListener('click', async () => {
       const { effective, isSystem } = await electronAPI.getCurrentTimezone();
       timezoneCurrentLabel!.textContent = isSystem
-        ? `Текущая: Системная таймзона (${effective})`
-        : 'Текущая: ' + effective;
+        ? `Current: System time zone (${effective})`
+        : 'Current: ' + effective;
       selectedTimezoneValue = isSystem ? null : effective;
       if (allTimezones.length === 0) {
         allTimezones = await electronAPI.getTimezones();
@@ -1039,8 +1039,8 @@ document.addEventListener('DOMContentLoaded', () => {
       currentTimezoneInfo = { effective, isSystem };
       updateTimeTimezoneDisplay();
       timezoneCurrentLabel!.textContent = isSystem
-        ? `Текущая: Системная таймзона (${effective})`
-        : 'Текущая: ' + effective;
+        ? `Current: System time zone (${effective})`
+        : 'Current: ' + effective;
       timezoneModalOverlay.classList.remove('visible');
     });
   }

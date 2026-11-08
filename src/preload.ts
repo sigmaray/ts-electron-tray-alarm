@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron';
 
-// Тип для будильника
+// Alarm type
 export interface Alarm {
   id: string;
   hour: number;
@@ -8,7 +8,7 @@ export interface Alarm {
   enabled: boolean;
 }
 
-// Предоставляем безопасный API для renderer процесса
+// Expose a safe API to the renderer process
 contextBridge.exposeInMainWorld('electronAPI', {
   minimizeWindow: () => {
     ipcRenderer.send('minimize-window');
@@ -19,7 +19,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   closeApp: () => {
     ipcRenderer.send('close-app');
   },
-  // Команды будильника
+  // Alarm commands
   addAlarm: (alarm: Alarm) => {
     ipcRenderer.send('alarm-add', alarm);
   },
@@ -35,25 +35,25 @@ contextBridge.exposeInMainWorld('electronAPI', {
   dismissAlarm: () => {
     ipcRenderer.send('alarm-dismiss');
   },
-  // Слушатели событий от main процесса
+  // Event listeners for messages from the main process
   onAlarmsUpdated: (callback: (alarms: Alarm[]) => void) => {
     ipcRenderer.on('alarms-updated', (_event, alarms) => callback(alarms));
   },
   onAlarmTriggered: (callback: (alarmId: string) => void) => {
     ipcRenderer.on('alarm-triggered', (_event, alarmId) => callback(alarmId));
   },
-  // Обработчик для сообщения от main процесса о закрытии нативного уведомления
+  // Listen for the main process closing a native notification
   onAlarmDismissFromMain: (callback: () => void) => {
     ipcRenderer.on('alarm-dismiss-from-main', () => callback());
   },
-  // Удаление слушателей
+  // Remove event listeners
   removeAlarmsUpdatedListener: () => {
     ipcRenderer.removeAllListeners('alarms-updated');
   },
   removeAlarmTriggeredListener: () => {
     ipcRenderer.removeAllListeners('alarm-triggered');
   },
-  // Окно отсчёта времени
+  // Countdown window
   toggleCountdownWindow: () => {
     ipcRenderer.send('countdown-window-toggle');
   },
@@ -66,7 +66,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onCountdownUpdate: (callback: (text: string) => void) => {
     ipcRenderer.on('countdown-update', (_event, text: string) => callback(text));
   },
-  // Таймзона
+  // Time zone
   getTimezones: () => ipcRenderer.invoke('get-timezones') as Promise<string[]>,
   getCurrentTimezone: () => ipcRenderer.invoke('get-current-timezone') as Promise<{ effective: string; isSystem: boolean }>,
   setTimezone: (tz: string | null) => ipcRenderer.invoke('set-timezone', tz) as Promise<{ effective: string; isSystem: boolean }>,

@@ -2,14 +2,14 @@ import { defineConfig, devices } from '@playwright/test';
 import * as path from 'path';
 
 /**
- * Конфигурация Playwright для E2E тестов Electron приложения
+ * Playwright configuration for Electron E2E tests
  */
 export default defineConfig({
   testDir: './tests/e2e',
-  fullyParallel: false, // Electron приложение должно запускаться последовательно
+  fullyParallel: false, // Run Electron tests sequentially
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
-  workers: 1, // Один воркер для Electron
+  workers: 1, // Use one worker for Electron
   reporter: 'html',
   use: {
     baseURL: 'file://',

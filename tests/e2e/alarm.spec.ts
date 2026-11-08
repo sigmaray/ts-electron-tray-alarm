@@ -2,13 +2,13 @@ import { test, expect, _electron as electron } from '@playwright/test';
 import * as fs from 'fs';
 import * as path from 'path';
 
-/** Приложение хранит settings.json рядом с dist/main.js — без очистки e2e видит будильники с прошлых запусков. */
+/** The E2E app uses an isolated settings file so alarms do not leak between runs. */
 function removeDistSettings(): void {
   const settingsPath = path.join(__dirname, '../../dist/settings.json');
   try {
     fs.unlinkSync(settingsPath);
   } catch {
-    // файла нет — нормально
+    // It is fine if the file does not exist.
   }
 }
 
@@ -19,7 +19,7 @@ test.describe('Alarm Application', () => {
   test.beforeAll(async () => {
     removeDistSettings();
 
-    // Запускаем реальное Electron приложение
+    // Launch the actual Electron application.
     const electronPath = require('electron');
     const mainPath = path.join(__dirname, '../../dist/main.js');
     
@@ -34,13 +34,13 @@ test.describe('Alarm Application', () => {
       },
     });
 
-    // Получаем первое окно приложения
+    // Get the first application window.
     window = await electronApp.firstWindow();
     
-    // Ждем загрузки приложения
+    // Wait for the application to load.
     await window.waitForLoadState('domcontentloaded');
     
-    // Приложение запускается свернутым в трей, поэтому нужно явно показать окно для тестов
+    // The app starts hidden in the tray, so show its window for the tests.
     await electronApp.evaluate(({ BrowserWindow }) => {
       const windows = BrowserWindow.getAllWindows();
       if (windows.length > 0) {
@@ -48,25 +48,25 @@ test.describe('Alarm Application', () => {
       }
     });
     
-    // Ждем появления основных элементов
+    // Wait for the main elements to appear.
     await window.waitForSelector('#newHour', { timeout: 10000 });
     await window.waitForSelector('#alarmsList', { timeout: 10000 });
     
-    // Ждем инициализации приложения
+    // Wait for the application to initialize.
     await window.waitForTimeout(1000);
   });
 
   test.afterAll(async () => {
-    // Закрываем Electron приложение после всех тестов
+    // Close the Electron application after the tests.
     if (electronApp) {
       await electronApp.close();
     }
   });
 
   test.beforeEach(async () => {
-    // Перед каждым тестом убеждаемся, что окно видимо
+    // Ensure the window is visible before each test.
     if (window) {
-      // Явно показываем окно (приложение запускается свернутым в трей)
+      // Show the window explicitly because the app starts hidden in the tray.
       await electronApp.evaluate(({ BrowserWindow }) => {
         const windows = BrowserWindow.getAllWindows();
         if (windows.length > 0) {
@@ -79,85 +79,85 @@ test.describe('Alarm Application', () => {
     }
   });
 
-  test('должен отображать начальное состояние', async () => {
-    // Проверяем, что поля ввода времени присутствуют
+  test('shows the initial state', async () => {
+    // Check that the time inputs are present.
     await expect(window.locator('#newHour')).toBeVisible();
     await expect(window.locator('#newMinute')).toBeVisible();
     await expect(window.locator('#newSecond')).toBeVisible();
     await expect(window.locator('#addAlarmBtn')).toBeVisible();
     
-    // Проверяем, что список будильников пуст
+    // Check that the alarm list is empty.
     const alarmsList = window.locator('#alarmsList');
-    await expect(alarmsList).toContainText('Нет установленных будильников');
+    await expect(alarmsList).toContainText('No alarms set');
   });
 
-  test('должен добавлять новый будильник', async () => {
-    // Устанавливаем время 14:30:00
+  test('adds a new alarm', async () => {
+    // Set the time to 14:30:00.
     await window.fill('#newHour', '14');
     await window.fill('#newMinute', '30');
     await window.fill('#newSecond', '00');
     
-    // Добавляем будильник
+    // Add an alarm.
     await window.click('#addAlarmBtn');
     
-    // Ждем обновления UI
+    // Wait for the UI to update.
     await window.waitForTimeout(500);
     
-    // Проверяем, что будильник появился в списке
+    // Check that the alarm appears in the list.
     const alarmsList = window.locator('#alarmsList');
     await expect(alarmsList).toContainText('14:30:00');
-    await expect(alarmsList).not.toContainText('Нет установленных будильников');
+    await expect(alarmsList).not.toContainText('No alarms set');
   });
 
-  test('должен добавлять несколько будильников', async () => {
-    // Добавляем первый будильник
+  test('adds multiple alarms', async () => {
+    // Add the first alarm.
     await window.fill('#newHour', '08');
     await window.fill('#newMinute', '00');
     await window.fill('#newSecond', '00');
     await window.click('#addAlarmBtn');
     await window.waitForTimeout(300);
     
-    // Добавляем второй будильник
+    // Add the second alarm.
     await window.fill('#newHour', '12');
     await window.fill('#newMinute', '15');
     await window.fill('#newSecond', '00');
     await window.click('#addAlarmBtn');
     await window.waitForTimeout(300);
     
-    // Добавляем третий будильник
+    // Add the third alarm.
     await window.fill('#newHour', '18');
     await window.fill('#newMinute', '45');
     await window.fill('#newSecond', '00');
     await window.click('#addAlarmBtn');
     await window.waitForTimeout(300);
     
-    // Проверяем, что все будильники присутствуют
+    // Check that all alarms are present.
     const alarmsList = window.locator('#alarmsList');
     await expect(alarmsList).toContainText('08:00:00');
     await expect(alarmsList).toContainText('12:15:00');
     await expect(alarmsList).toContainText('18:45:00');
   });
 
-  test('должен редактировать будильник', async () => {
-    // Добавляем будильник
+  test('edits an alarm', async () => {
+    // Add an alarm.
     await window.fill('#newHour', '10');
     await window.fill('#newMinute', '00');
     await window.fill('#newSecond', '00');
     await window.click('#addAlarmBtn');
     await window.waitForTimeout(500);
     
-    // Проверяем, что будильник добавлен
+    // Check that the alarm was added.
     const alarmsList = window.locator('#alarmsList');
     await expect(alarmsList).toContainText('10:00:00');
     
-    // Находим кнопку редактирования для будильника 10:00:00
-    // Используем более надежный селектор
-    const editBtn = window.locator('.alarm-item:has-text("10:00:00")').locator('button:has-text("Редактировать")');
+    // Find the Edit button for the 10:00:00 alarm.
+    // Use a more reliable selector.
+    const editBtn = window.locator('.alarm-item:has-text("10:00:00")').locator('button:has-text("Edit")');
     await editBtn.click();
     await window.waitForTimeout(500);
     
-    // Проверяем, что появились поля редактирования
-    // Ищем в редактируемом элементе
+    // Check that the edit fields appear.
+    // Find the fields in the alarm being edited.
     const editingItem = window.locator('.alarm-item.editing');
     const hourInput = editingItem.locator('input.hour-input');
     const minuteInput = editingItem.locator('input.minute-input');
@@ -167,21 +167,21 @@ test.describe('Alarm Application', () => {
     await expect(minuteInput).toBeVisible({ timeout: 5000 });
     await expect(secondInput).toBeVisible({ timeout: 5000 });
     
-    // Изменяем время
+    // Change the time.
     await hourInput.fill('15');
     await minuteInput.fill('30');
     await secondInput.fill('45');
     
-    // Сохраняем
-    const saveBtn = editingItem.locator('button:has-text("Сохранить")');
+    // Save the changes.
+    const saveBtn = editingItem.locator('button:has-text("Save")');
     await saveBtn.click();
     await window.waitForTimeout(500);
     
-    // Проверяем, что время изменилось
+    // Check that the time changed.
     await expect(alarmsList).toContainText('15:30:45');
   });
 
-  test('должен отменять редактирование будильника', async () => {
+  test('cancels editing an alarm', async () => {
     await window.fill('#newHour', '09');
     await window.fill('#newMinute', '00');
     await window.fill('#newSecond', '00');
@@ -191,7 +191,7 @@ test.describe('Alarm Application', () => {
     const alarmRow = window.locator('.alarm-item:has-text("09:00:00")');
     await expect(alarmRow).toBeVisible();
 
-    await alarmRow.locator('button:has-text("Редактировать")').click();
+    await alarmRow.locator('button:has-text("Edit")').click();
     await window.waitForTimeout(300);
 
     const editingItem = window.locator('.alarm-item.editing');
@@ -199,25 +199,25 @@ test.describe('Alarm Application', () => {
     await editingItem.locator('input.minute-input').fill('00');
     await editingItem.locator('input.second-input').fill('00');
 
-    await editingItem.locator('button:has-text("Отмена")').click();
+    await editingItem.locator('button:has-text("Cancel")').click();
     await window.waitForTimeout(500);
 
     await expect(window.locator('.alarm-item:has-text("09:00:00")')).toBeVisible();
   });
 
-  test('должен удалять будильник', async () => {
-    // Добавляем будильник
+  test('deletes an alarm', async () => {
+    // Add an alarm.
     await window.fill('#newHour', '11');
     await window.fill('#newMinute', '00');
     await window.fill('#newSecond', '00');
     await window.click('#addAlarmBtn');
     await window.waitForTimeout(500);
     
-    // Проверяем, что будильник присутствует
+    // Check that the alarm is present.
     const alarmsList = window.locator('#alarmsList');
     await expect(alarmsList).toContainText('11:00:00');
     
-    // Устанавливаем обработчик для диалога подтверждения перед кликом
+    // Register the confirmation dialog handler before clicking.
     const dialogPromise = new Promise<void>((resolve) => {
       window.once('dialog', async dialog => {
         await dialog.accept();
@@ -225,58 +225,58 @@ test.describe('Alarm Application', () => {
       });
     });
     
-    // Удаляем будильник
-    const deleteBtn = window.locator('.alarm-item:has-text("11:00:00")').locator('button:has-text("Удалить")');
+    // Delete the alarm.
+    const deleteBtn = window.locator('.alarm-item:has-text("11:00:00")').locator('button:has-text("Delete")');
     await deleteBtn.click();
     
-    // Ждем обработки диалога
+    // Wait for the dialog to be handled.
     await dialogPromise;
     await window.waitForTimeout(500);
     
-    // Проверяем, что будильник удален
+    // Check that the alarm was deleted.
     await expect(alarmsList).not.toContainText('11:00:00');
   });
 
-  test('должен включать и выключать будильник', async () => {
-    // Добавляем будильник
+  test('enables and disables an alarm', async () => {
+    // Add an alarm.
     await window.fill('#newHour', '13');
     await window.fill('#newMinute', '00');
     await window.fill('#newSecond', '00');
     await window.click('#addAlarmBtn');
     await window.waitForTimeout(500);
     
-    // Находим переключатель для этого будильника
+    // Find the toggle for this alarm.
     const alarmItem = window.locator('.alarm-item:has-text("13:00:00")');
-    // Выбираем первый чекбокс (включение/выключение), а не второй (повторяющийся)
+    // Select the enable toggle, not the recurring toggle.
     const toggle = alarmItem.locator('input[type="checkbox"]').first();
     
-    // Проверяем, что будильник включен по умолчанию
+    // Check that the alarm is enabled by default.
     await expect(toggle).toBeChecked();
     
-    // Выключаем будильник через клик по label (более надежно)
-    // Выбираем первый label (для включения/выключения)
+    // Disable the alarm by clicking its label.
+    // Select the first label, which controls whether the alarm is enabled.
     const toggleLabel = alarmItem.locator('label.alarm-toggle').first();
     await toggleLabel.click();
     await window.waitForTimeout(1000);
     
-    // Проверяем, что переключатель обновился
-    // Обновляем селектор, так как DOM мог измениться
+    // Check that the toggle updated.
+    // Refresh the selector because the DOM may have changed.
     const toggleAfter = alarmItem.locator('input[type="checkbox"]').first();
     await expect(toggleAfter).not.toBeChecked();
     
-    // Включаем обратно
+    // Enable the alarm again.
     await toggleLabel.click();
     await window.waitForTimeout(1000);
     const toggleAfter2 = alarmItem.locator('input[type="checkbox"]').first();
     await expect(toggleAfter2).toBeChecked();
   });
 
-  test('должен валидировать ввод времени', async () => {
+  test('validates time input', async () => {
     await window.fill('#newHour', '25');
     await window.fill('#newMinute', '00');
     await window.fill('#newSecond', '00');
 
-    // Нативный alert в Electron не даёт стабильного page.on('dialog'); подмена без модальной блокировки.
+    // Electron native alerts do not reliably trigger page.on('dialog'); stub it without blocking the renderer.
     await window.evaluate(() => {
       (window as unknown as { __validationAlert?: string }).__validationAlert = '';
       window.alert = (message: string) => {
@@ -289,14 +289,14 @@ test.describe('Alarm Application', () => {
     const alertMessage = await window.evaluate(
       () => (window as unknown as { __validationAlert?: string }).__validationAlert ?? '',
     );
-    expect(alertMessage).toContain('корректный час');
+    expect(alertMessage).toContain('valid hour');
 
     const alarmsList = window.locator('#alarmsList');
     await expect(alarmsList).not.toContainText('25:00:00');
   });
 
-  test('должен сортировать будильники по времени', async () => {
-    // Добавляем будильники в произвольном порядке
+  test('sorts alarms by time', async () => {
+    // Add alarms in an arbitrary order.
     await window.fill('#newHour', '20');
     await window.fill('#newMinute', '00');
     await window.fill('#newSecond', '00');
@@ -315,11 +315,11 @@ test.describe('Alarm Application', () => {
     await window.click('#addAlarmBtn');
     await window.waitForTimeout(300);
     
-    // Проверяем, что будильники отсортированы
+    // Check that the alarms are sorted.
     const alarmsList = window.locator('#alarmsList');
     const text = await alarmsList.textContent();
     
-    // Проверяем порядок появления времени в тексте
+    // Check the order of times in the rendered text.
     const index08 = text!.indexOf('08:00:00');
     const index12 = text!.indexOf('12:00:00');
     const index20 = text!.indexOf('20:00:00');
@@ -328,8 +328,8 @@ test.describe('Alarm Application', () => {
     expect(index12).toBeLessThan(index20);
   });
 
-  test('должен сворачивать окно в трей', async () => {
-    // Убеждаемся, что окно видимо
+  test('minimizes the window to the tray', async () => {
+    // Ensure the window is visible.
     const isVisibleBefore = await electronApp.evaluate(({ BrowserWindow }) => {
       const windows = BrowserWindow.getAllWindows();
       if (windows.length > 0 && !windows[0].isVisible()) {
@@ -340,7 +340,7 @@ test.describe('Alarm Application', () => {
     });
     expect(isVisibleBefore).toBe(true);
 
-    // Эмулируем клик по иконке трея для сворачивания окна
+    // Simulate clicking the tray icon to hide the window.
     await electronApp.evaluate(() => {
       const getTray = (global as any).__tray__;
       if (getTray) {
@@ -351,10 +351,10 @@ test.describe('Alarm Application', () => {
       }
     });
 
-    // Ждем, пока окно скроется
+    // Wait for the window to hide.
     await window.waitForTimeout(500);
 
-    // Проверяем, что окно скрыто
+    // Check that the window is hidden.
     const isVisibleAfter = await electronApp.evaluate(({ BrowserWindow }) => {
       const windows = BrowserWindow.getAllWindows();
       return windows.length > 0 && windows[0].isVisible();
@@ -362,21 +362,21 @@ test.describe('Alarm Application', () => {
     expect(isVisibleAfter).toBe(false);
   });
 
-  test('должен показывать окно из трея', async () => {
-    // Сначала сворачиваем окно в трей
+  test('shows the window from the tray', async () => {
+    // First minimize the window to the tray.
     await window.evaluate(() => {
       (window as any).electronAPI.minimizeWindow();
     });
     await window.waitForTimeout(500);
 
-    // Проверяем, что окно скрыто
+    // Check that the window is hidden.
     const isVisibleBefore = await electronApp.evaluate(({ BrowserWindow }) => {
       const windows = BrowserWindow.getAllWindows();
       return windows.length > 0 && windows[0].isVisible();
     });
     expect(isVisibleBefore).toBe(false);
 
-    // Эмулируем клик по иконке трея
+    // Simulate clicking the tray icon.
     await electronApp.evaluate(() => {
       const getTray = (global as any).__tray__;
       if (getTray) {
@@ -387,33 +387,33 @@ test.describe('Alarm Application', () => {
       }
     });
 
-    // Ждем, пока окно появится
+    // Wait for the window to appear.
     await window.waitForTimeout(500);
 
-    // Проверяем, что окно снова видимо
+    // Check that the window is visible again.
     const isVisibleAfter = await electronApp.evaluate(({ BrowserWindow }) => {
       const windows = BrowserWindow.getAllWindows();
       return windows.length > 0 && windows[0].isVisible();
     });
     expect(isVisibleAfter).toBe(true);
 
-    // Убеждаемся, что элементы интерфейса доступны
+    // Ensure that the UI elements are available.
     await window.waitForSelector('#newHour', { timeout: 5000 });
   });
 
-  test('должен сохранять состояние при сворачивании и разворачивании', async () => {
-    // Добавляем будильник
+  test('preserves state when the window is hidden and restored', async () => {
+    // Add an alarm.
     await window.fill('#newHour', '16');
     await window.fill('#newMinute', '00');
     await window.fill('#newSecond', '00');
     await window.click('#addAlarmBtn');
     await window.waitForTimeout(500);
 
-    // Проверяем, что будильник присутствует
+    // Check that the alarm is present.
     const alarmsListBefore = window.locator('#alarmsList');
     await expect(alarmsListBefore).toContainText('16:00:00');
 
-    // Сворачиваем в трей
+    // Minimize the window to the tray.
     await electronApp.evaluate(() => {
       const getTray = (global as any).__tray__;
       if (getTray) {
@@ -425,7 +425,7 @@ test.describe('Alarm Application', () => {
     });
     await window.waitForTimeout(500);
 
-    // Показываем окно обратно
+    // Show the window again.
     await electronApp.evaluate(() => {
       const getTray = (global as any).__tray__;
       if (getTray) {
@@ -437,17 +437,17 @@ test.describe('Alarm Application', () => {
     });
     await window.waitForTimeout(500);
 
-    // Ждем загрузки элементов
+    // Wait for the elements to load.
     await window.waitForSelector('#alarmsList', { timeout: 5000 });
 
-    // Проверяем, что будильник все еще присутствует
+    // Check that the alarm is still present.
     const alarmsListAfter = window.locator('#alarmsList');
     await expect(alarmsListAfter).toContainText('16:00:00');
   });
 });
 
 test.describe('Alarm Application - Initial State', () => {
-  test('должен запускаться свернутым в трей', async () => {
+  test('starts minimized to the tray', async () => {
     removeDistSettings();
 
     const electronPath = require('electron');
@@ -459,20 +459,21 @@ test.describe('Alarm Application - Initial State', () => {
       env: {
         ...process.env,
         ELECTRON_DISABLE_SANDBOX: '1',
+        ALARM_SETTINGS_PATH: path.join(__dirname, '../../dist/settings.json'),
       },
     });
 
     try {
-      // Получаем первое окно приложения
+      // Get the first application window.
       const testWindow = await testApp.firstWindow();
       
-      // Ждем загрузки приложения
+      // Wait for the application to load.
       await testWindow.waitForLoadState('domcontentloaded');
       
-      // Ждем немного для инициализации
+      // Wait briefly for initialization.
       await testWindow.waitForTimeout(1000);
       
-      // Проверяем, что окно изначально скрыто (приложение запускается свернутым в трей)
+      // Check that the window starts hidden in the tray.
       const isVisible = await testApp.evaluate(({ BrowserWindow }) => {
         const windows = BrowserWindow.getAllWindows();
         return windows.length > 0 && windows[0].isVisible();
@@ -480,7 +481,7 @@ test.describe('Alarm Application - Initial State', () => {
       
       expect(isVisible).toBe(false);
     } finally {
-      // Закрываем тестовое приложение
+      // Close the test application.
       await testApp.close();
     }
   });

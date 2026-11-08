@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Будильник</title>
+    <title>Alarm Clock</title>
     <style>
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
@@ -431,11 +431,11 @@
 </head>
 <body>
     <div class="container">
-        <h1>⏰ Будильник</h1>
+        <h1>⏰ Alarm Clock</h1>
         <p class="current-time-tz" id="currentTimeTimezone">—</p>
 
         <div class="add-alarm-section">
-            <h2 style="margin-top: 0;">Добавить будильник</h2>
+            <h2 style="margin-top: 0;">Add Alarm</h2>
             <div class="time-input-group">
                 <input type="number" id="newHour" class="time-input" min="0" max="23" value="00" placeholder="00">
                 <span class="time-separator">:</span>
@@ -444,13 +444,13 @@
                 <input type="number" id="newSecond" class="time-input" min="0" max="59" value="00" placeholder="00">
             </div>
             <div class="quick-time-links">
-                <a href="#" class="quick-time-link" onclick="setQuickTimeSeconds(30); return false;">через 30 секунд</a>
-                <a href="#" class="quick-time-link" onclick="setQuickTimeSeconds(60); return false;">через 1 минуту</a>
-                <a href="#" class="quick-time-link" onclick="setQuickTime(2); return false;">через 2 минуты</a>
-                <a href="#" class="quick-time-link" onclick="setQuickTime(5); return false;">через 5 минут</a>
-                <a href="#" class="quick-time-link" onclick="setQuickTime(30); return false;">через 30 минут</a>
-                <a href="#" class="quick-time-link" onclick="setQuickTime(60); return false;">через 1 час</a>
-                <a href="#" class="quick-time-link" onclick="setQuickTime(120); return false;">через 2 часа</a>
+                <a href="#" class="quick-time-link" onclick="setQuickTimeSeconds(30); return false;">in 30 seconds</a>
+                <a href="#" class="quick-time-link" onclick="setQuickTimeSeconds(60); return false;">in 1 minute</a>
+                <a href="#" class="quick-time-link" onclick="setQuickTime(2); return false;">in 2 minutes</a>
+                <a href="#" class="quick-time-link" onclick="setQuickTime(5); return false;">in 5 minutes</a>
+                <a href="#" class="quick-time-link" onclick="setQuickTime(30); return false;">in 30 minutes</a>
+                <a href="#" class="quick-time-link" onclick="setQuickTime(60); return false;">in 1 hour</a>
+                <a href="#" class="quick-time-link" onclick="setQuickTime(120); return false;">in 2 hours</a>
             </div>
             <div class="recurring-toggle-group">
                 <div class="toggle-group">
@@ -458,49 +458,49 @@
                         <input type="checkbox" id="newRecurring">
                         <span class="toggle-slider"></span>
                     </label>
-                    <span class="toggle-label">Повторяющийся</span>
+                    <span class="toggle-label">Repeat daily</span>
                 </div>
             </div>
-            <button id="addAlarmBtn" class="btn-add">Добавить</button>
+            <button id="addAlarmBtn" class="btn-add">Add Alarm</button>
         </div>
 
         <div class="alarms-section">
-            <h2 style="margin-top: 0;">Установленные будильники</h2>
+            <h2 style="margin-top: 0;">Alarms</h2>
             <div id="alarmsList" class="alarms-list">
-                <div class="no-alarms">Нет установленных будильников</div>
+                <div class="no-alarms">No alarms set</div>
             </div>
         </div>
 
-        <button id="dismissAlarmBtn" class="dismiss-btn" style="display: none;">Отключить звук будильника</button>
+        <button id="dismissAlarmBtn" class="dismiss-btn" style="display: none;">Dismiss Alarm</button>
 
         <div class="app-controls">
-            <button id="timezoneBtn">Установить таймзону</button>
-            <button id="countdownWindowBtn">Показывать окно отсчёта времени</button>
-            <button id="minimizeBtn">Свернуть в трей</button>
-            <button id="closeBtn" class="close-btn">Закрыть</button>
+            <button id="timezoneBtn">Set Time Zone</button>
+            <button id="countdownWindowBtn">Show Countdown Window</button>
+            <button id="minimizeBtn">Minimize to Tray</button>
+            <button id="closeBtn" class="close-btn">Close</button>
         </div>
 
         <div id="timezoneModalOverlay" class="timezone-modal-overlay">
             <div class="timezone-modal">
-                <h2>Выбор таймзоны</h2>
-                <p class="current-tz" id="timezoneCurrentLabel">Текущая: системная</p>
-                <input type="text" id="timezoneSearch" placeholder="Поиск по названию...">
+                <h2>Select Time Zone</h2>
+                <p class="current-tz" id="timezoneCurrentLabel">Current: System Default</p>
+                <input type="text" id="timezoneSearch" placeholder="Search time zones...">
                 <div class="tz-list" id="timezoneList"></div>
                 <div class="modal-actions">
-                    <button id="timezoneCancelBtn" class="btn-cancel">Отмена</button>
-                    <button id="timezoneSaveBtn" class="btn-save">Сохранить</button>
+                    <button id="timezoneCancelBtn" class="btn-cancel">Cancel</button>
+                    <button id="timezoneSaveBtn" class="btn-save">Save</button>
                 </div>
             </div>
         </div>
 
         <div class="info">
-            <p><strong>Инструкция:</strong></p>
-            <p>• Установите время в 24-часовом формате (00:00:00 - 23:59:59)</p>
-            <p>• Вы можете добавить неограниченное количество будильников</p>
-            <p>• Используйте переключатель для включения/выключения будильника</p>
-            <p>• Нажмите "Редактировать" для изменения времени будильника</p>
-            <p>• В системном трее отображается время до ближайшего будильника</p>
-            <p>• Приложение можно свернуть в трей - будильники продолжат работать</p>
+            <p><strong>Instructions:</strong></p>
+            <p>• Set the time in 24-hour format (00:00:00–23:59:59)</p>
+            <p>• Add as many alarms as you need</p>
+            <p>• Use the toggle to enable or disable an alarm</p>
+            <p>• Select "Edit" to change an alarm time</p>
+            <p>• The system tray shows the time remaining until the next alarm</p>
+            <p>• Minimize the app to the system tray to keep alarms running</p>
         </div>
     </div>
 

@@ -1,6 +1,6 @@
 # Project guidance
 
-- Keep the user interface and comments in Russian unless a change specifically requires otherwise.
+- Use English by default for the user interface, source code comments, tests, and documentation. Keep Russian documentation in a separate `*.ru.md` file when requested.
 - Keep Electron main-process logic out of renderer code; expose renderer capabilities through the preload API.
 - Persist settings through `src/settings.ts`; do not write settings into the packaged application directory directly.
 - Keep settings parsing defensive because the JSON file can be edited or partially corrupted.
