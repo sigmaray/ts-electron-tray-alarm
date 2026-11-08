@@ -6,6 +6,8 @@ export interface Alarm {
   hour: number;
   minute: number;
   enabled: boolean;
+  recurring: boolean;
+  scheduledAt?: number;
 }
 
 // Expose a safe API to the renderer process

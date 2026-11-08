@@ -1,5 +1,6 @@
 import { app, ipcMain, IpcMain } from 'electron';
-import { Alarm } from './settings';
+import { Alarm, isValidAlarmPayload, normalizeTimeZone } from './settings';
+import { alarmTimeHasPassedToday, nextAlarmTimestamp } from './time.js';
 
 export interface IpcDependencies {
   getAlarms(): Alarm[];
@@ -19,23 +20,29 @@ export interface IpcDependencies {
 
 export function registerIpcHandlers(deps: IpcDependencies, handlers: IpcMain = ipcMain): void {
   handlers.on('alarm-add', (_event, alarm: Alarm) => {
-    deps.setAlarms([...deps.getAlarms(), alarm]);
+    const current = deps.getAlarms();
+    if (!isValidAlarmPayload(alarm) || current.some(existing => existing.id === alarm.id)) return;
+    if (current.some(existing => existing.hour === alarm.hour && existing.minute === alarm.minute && existing.second === alarm.second)) return;
+    deps.setAlarms([...current, scheduleAlarm(alarm, deps)]);
     deps.saveSettings();
     deps.updateTrayIcon();
     deps.sendAlarmsToRenderer();
   });
   handlers.on('alarm-update', (_event, alarm: Alarm) => {
     const current = deps.getAlarms();
+    if (!isValidAlarmPayload(alarm)) return;
     const index = current.findIndex(existing => existing.id === alarm.id);
     if (index < 0) return;
+    if (current.some(existing => existing.id !== alarm.id && existing.hour === alarm.hour && existing.minute === alarm.minute && existing.second === alarm.second)) return;
     const updated = [...current];
-    updated[index] = alarm;
+    updated[index] = scheduleAlarm(alarm, deps);
     deps.setAlarms(updated);
     deps.saveSettings();
     deps.updateTrayIcon();
     deps.sendAlarmsToRenderer();
   });
   handlers.on('alarm-delete', (_event, alarmId: string) => {
+    if (typeof alarmId !== 'string') return;
     deps.setAlarms(deps.getAlarms().filter(alarm => alarm.id !== alarmId));
     deps.saveSettings();
     deps.updateTrayIcon();
@@ -61,8 +68,22 @@ export function registerIpcHandlers(deps: IpcDependencies, handlers: IpcMain = i
     effective: deps.getEffectiveTimezone(), isSystem: deps.getTimezonePref() === null,
   }));
   handlers.handle('set-timezone', (_event, timezone: string | null) => {
-    deps.setTimezonePref(timezone && timezone.trim() ? timezone.trim() : null);
+    if (timezone !== null && typeof timezone !== 'string') throw new TypeError('Time zone must be a string or null');
+    const normalized = normalizeTimeZone(timezone);
+    if (timezone !== null && timezone.trim() !== '' && normalized === null) throw new RangeError('Unknown time zone');
+    deps.setTimezonePref(normalized);
     deps.saveSettings();
     return { effective: deps.getEffectiveTimezone(), isSystem: deps.getTimezonePref() === null };
   });
+}
+
+function scheduleAlarm(alarm: Alarm, deps: IpcDependencies): Alarm {
+  const scheduled = { ...alarm };
+  if (!scheduled.enabled) {
+    delete scheduled.scheduledAt;
+  } else if (scheduled.scheduledAt === undefined
+    && alarmTimeHasPassedToday(deps.getEffectiveTimezone(), scheduled, Date.now())) {
+    scheduled.scheduledAt = nextAlarmTimestamp(deps.getEffectiveTimezone(), scheduled, Date.now());
+  }
+  return scheduled;
 }

@@ -9,6 +9,7 @@ export interface Alarm {
   second: number;
   enabled: boolean;
   recurring: boolean;
+  scheduledAt?: number;
 }
 
 export interface AppSettings {
@@ -37,22 +38,60 @@ function clampTimeUnit(value: unknown, min: number, max: number): number {
   return Math.max(min, Math.min(max, Math.trunc(n)));
 }
 
+const ALARM_ID_PATTERN = /^[a-zA-Z0-9_-]{1,128}$/;
+
 function parseAlarm(raw: unknown): Alarm | null {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
   const item = raw as Record<string, unknown>;
-  const id = typeof item.id === 'string' && item.id.trim() ? item.id.trim() : `alarm-${randomUUID()}`;
+  const candidateId = typeof item.id === 'string' ? item.id.trim() : '';
+  const id = ALARM_ID_PATTERN.test(candidateId) ? candidateId : `alarm-${randomUUID()}`;
+  const scheduledAt = typeof item.scheduledAt === 'number' && Number.isFinite(item.scheduledAt) && Math.abs(item.scheduledAt) <= 8.64e15
+    ? item.scheduledAt
+    : undefined;
   return {
     id,
     hour: clampTimeUnit(item.hour, 0, 23),
     minute: clampTimeUnit(item.minute, 0, 59),
     second: clampTimeUnit(item.second, 0, 59),
-    enabled: Boolean(item.enabled),
-    recurring: Boolean(item.recurring),
+    enabled: item.enabled === true,
+    recurring: item.recurring === true,
+    ...(scheduledAt === undefined ? {} : { scheduledAt }),
   };
 }
 
 export function parseAlarms(raw: unknown): Alarm[] {
-  return Array.isArray(raw) ? raw.map(parseAlarm).filter((alarm): alarm is Alarm => alarm !== null) : [];
+  if (!Array.isArray(raw)) return [];
+  const ids = new Set<string>();
+  return raw.map(parseAlarm).filter((alarm): alarm is Alarm => {
+    if (!alarm) return false;
+    if (ids.has(alarm.id)) alarm.id = `alarm-${randomUUID()}`;
+    ids.add(alarm.id);
+    return true;
+  });
+}
+
+export function normalizeTimeZone(value: unknown): string | null {
+  if (typeof value !== 'string' || value.trim() === '') return null;
+  const timeZone = value.trim();
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone });
+    return timeZone;
+  } catch {
+    return null;
+  }
+}
+
+export function isValidAlarmPayload(value: unknown): value is Alarm {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const alarm = value as Record<string, unknown>;
+  return typeof alarm.id === 'string'
+    && ALARM_ID_PATTERN.test(alarm.id)
+    && Number.isInteger(alarm.hour) && (alarm.hour as number) >= 0 && (alarm.hour as number) <= 23
+    && Number.isInteger(alarm.minute) && (alarm.minute as number) >= 0 && (alarm.minute as number) <= 59
+    && Number.isInteger(alarm.second) && (alarm.second as number) >= 0 && (alarm.second as number) <= 59
+    && typeof alarm.enabled === 'boolean'
+    && typeof alarm.recurring === 'boolean'
+    && (alarm.scheduledAt === undefined || (typeof alarm.scheduledAt === 'number' && Number.isFinite(alarm.scheduledAt) && Math.abs(alarm.scheduledAt) <= 8.64e15));
 }
 
 export function parseSettings(raw: unknown): AppSettings {
@@ -60,8 +99,8 @@ export function parseSettings(raw: unknown): AppSettings {
   const value = raw as Record<string, unknown>;
   return {
     alarms: parseAlarms(value.alarms),
-    countdownWindowVisible: Boolean(value.countdownWindowVisible),
-    timezone: value.timezone == null ? undefined : String(value.timezone),
+    countdownWindowVisible: value.countdownWindowVisible === true,
+    timezone: normalizeTimeZone(value.timezone) ?? undefined,
   };
 }
 

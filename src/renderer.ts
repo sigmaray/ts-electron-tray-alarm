@@ -6,6 +6,7 @@ interface Alarm {
   second: number;
   enabled: boolean;
   recurring: boolean;
+  scheduledAt?: number;
 }
 
 interface ElectronAPI {
@@ -39,6 +40,9 @@ let notificationCheckInterval: NodeJS.Timeout | null = null;
 let timeUpdateInterval: NodeJS.Timeout | null = null;
 let currentTimezoneInfo: { effective: string; isSystem: boolean } | null = null;
 let timeTimezoneInterval: ReturnType<typeof setInterval> | null = null;
+let pendingNewAlarmScheduledAt: number | undefined;
+let pendingEditScheduledAt: number | undefined;
+const alarmTime = (window as any).AlarmTime;
 
 function updateTimeTimezoneDisplay(): void {
   const el = document.getElementById('currentTimeTimezone');
@@ -64,91 +68,14 @@ function formatTime(hour: number, minute: number, second: number): string {
   return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:${String(second).padStart(2, '0')}`;
 }
 
-// Current local date and time in the specified time zone, used for relative alarm times
-function getLocalTimeInTimezone(tz: string): { year: number; month: number; day: number; hour: number; minute: number; second: number } {
-  const now = new Date();
-  const formatter = new Intl.DateTimeFormat('en-CA', {
-    timeZone: tz,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: false,
-  });
-  const parts = formatter.formatToParts(now);
-  const get = (type: string) => {
-    const p = parts.find(x => x.type === type);
-    return p ? parseInt(p.value, 10) : 0;
-  };
-  return {
-    year: get('year'),
-    month: get('month'),
-    day: get('day'),
-    hour: get('hour'),
-    minute: get('minute'),
-    second: get('second'),
-  };
-}
-
-// UTC timestamp for the given date and time in time zone tz
-function getTimestampInTimezone(tz: string, year: number, month: number, day: number, hour: number, minute: number, second: number): number {
-  const formatter = new Intl.DateTimeFormat('en-CA', {
-    timeZone: tz,
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: false,
-  });
-  const dayNoonUTC = Date.UTC(year, month - 1, day, 12, 0, 0);
-  const parts = formatter.formatToParts(dayNoonUTC);
-  const get = (type: string) => {
-    const p = parts.find(x => x.type === type);
-    return p ? parseInt(p.value, 10) : 0;
-  };
-  const localHour = get('hour');
-  const localMinute = get('minute');
-  const localSecond = get('second');
-  const offsetSec = (localHour * 3600 + localMinute * 60 + localSecond) - 12 * 3600;
-  const offsetMs = offsetSec * 1000;
-  return Date.UTC(year, month - 1, day, hour, minute, second) - offsetMs;
-}
-
-/** Shift a Gregorian calendar date. Date.UTC normalizes month/year boundaries without using the system time zone. */
-function addGregorianCalendarDays(year: number, month: number, day: number, deltaDays: number): { year: number; month: number; day: number } {
-  const ms = Date.UTC(year, month - 1, day + deltaDays);
-  const d = new Date(ms);
-  return { year: d.getUTCFullYear(), month: d.getUTCMonth() + 1, day: d.getUTCDate() };
-}
-
-// Local time in time zone tz for a UTC timestamp, used by the quick-set buttons
 function getLocalTimeFromTimestamp(tz: string, timestamp: number): { hour: number; minute: number; second: number } {
-  const formatter = new Intl.DateTimeFormat('en-CA', {
-    timeZone: tz,
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: false,
-  });
-  const parts = formatter.formatToParts(new Date(timestamp));
-  const get = (type: string) => {
-    const p = parts.find(x => x.type === type);
-    return p ? parseInt(p.value, 10) : 0;
-  };
-  return { hour: get('hour'), minute: get('minute'), second: get('second') };
+  const local = alarmTime.localDateTimeInTimezone(tz, timestamp);
+  return { hour: local.hour, minute: local.minute, second: local.second };
 }
 
 function getTimeUntilAlarm(alarm: Alarm): number {
   const tz = currentTimezoneInfo?.effective ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
-  const now = new Date();
-  const local = getLocalTimeInTimezone(tz);
-  let alarmTs = getTimestampInTimezone(tz, local.year, local.month, local.day, alarm.hour, alarm.minute, alarm.second);
-  if (alarmTs <= now.getTime()) {
-    const next = addGregorianCalendarDays(local.year, local.month, local.day, 1);
-    alarmTs = getTimestampInTimezone(tz, next.year, next.month, next.day, alarm.hour, alarm.minute, alarm.second);
-  }
-  return Math.floor((alarmTs - now.getTime()) / 1000);
+  return Math.floor((alarmTime.nextAlarmTimestamp(tz, alarm, Date.now()) - Date.now()) / 1000);
 }
 
 function formatTimeUntil(seconds: number): string {
@@ -220,6 +147,11 @@ function setupTimeInputHandlers(input: HTMLInputElement): void {
   }
   
   // Clear the field on focus when its value is "0" or "00"
+  input.addEventListener('input', () => {
+    if (input.id.startsWith('edit-')) pendingEditScheduledAt = undefined;
+    else pendingNewAlarmScheduledAt = undefined;
+  });
+
   input.addEventListener('focus', function focusHandler() {
     if (this.value === '0' || this.value === '00') {
       this.value = '';
@@ -289,13 +221,19 @@ function renderAlarms(): void {
 
   container.innerHTML = sortedAlarms.map(alarm => {
     const isEditing = editingAlarmId === alarm.id;
-    const timeStr = formatTime(alarm.hour, alarm.minute, alarm.second);
+    const scheduledLocalTime = alarm.scheduledAt === undefined
+      ? null
+      : getLocalTimeFromTimestamp(currentTimezoneInfo?.effective ?? Intl.DateTimeFormat().resolvedOptions().timeZone, alarm.scheduledAt);
+    const displayHour = scheduledLocalTime?.hour ?? alarm.hour;
+    const displayMinute = scheduledLocalTime?.minute ?? alarm.minute;
+    const displaySecond = scheduledLocalTime?.second ?? alarm.second;
+    const timeStr = formatTime(displayHour, displayMinute, displaySecond);
     
     if (isEditing) {
       // Use saved field values when available, otherwise use the alarm values
-      const hourValue = editingValues ? editingValues.hour : alarm.hour;
-      const minuteValue = editingValues ? editingValues.minute : alarm.minute;
-      const secondValue = editingValues ? editingValues.second : alarm.second;
+      const hourValue = editingValues ? editingValues.hour : displayHour;
+      const minuteValue = editingValues ? editingValues.minute : displayMinute;
+      const secondValue = editingValues ? editingValues.second : displaySecond;
       
       return `
         <div class="alarm-item editing" data-id="${alarm.id}">
@@ -406,6 +344,7 @@ function setQuickTime(minutes: number): void {
 
   const tz = getEffectiveTimezoneForQuick();
   const futureTs = Date.now() + minutes * 60 * 1000;
+  pendingNewAlarmScheduledAt = futureTs;
   const { hour, minute, second } = getLocalTimeFromTimestamp(tz, futureTs);
 
   hourInput.value = String(hour).padStart(2, '0');
@@ -422,6 +361,7 @@ function setQuickTimeSeconds(seconds: number): void {
 
   const tz = getEffectiveTimezoneForQuick();
   const futureTs = Date.now() + seconds * 1000;
+  pendingNewAlarmScheduledAt = futureTs;
   const { hour, minute, second } = getLocalTimeFromTimestamp(tz, futureTs);
 
   hourInput.value = String(hour).padStart(2, '0');
@@ -438,6 +378,7 @@ function setQuickTimeForEdit(alarmId: string, minutes: number): void {
 
   const tz = getEffectiveTimezoneForQuick();
   const futureTs = Date.now() + minutes * 60 * 1000;
+  pendingEditScheduledAt = futureTs;
   const { hour, minute, second } = getLocalTimeFromTimestamp(tz, futureTs);
 
   hourInput.value = String(hour).padStart(2, '0');
@@ -454,6 +395,7 @@ function setQuickTimeSecondsForEdit(alarmId: string, seconds: number): void {
 
   const tz = getEffectiveTimezoneForQuick();
   const futureTs = Date.now() + seconds * 1000;
+  pendingEditScheduledAt = futureTs;
   const { hour, minute, second } = getLocalTimeFromTimestamp(tz, futureTs);
 
   hourInput.value = String(hour).padStart(2, '0');
@@ -503,6 +445,7 @@ function addAlarm(): void {
     second,
     enabled: true,
     recurring,
+    scheduledAt: pendingNewAlarmScheduledAt,
   };
 
   const electronAPI = (window as any).electronAPI as ElectronAPI | undefined;
@@ -517,10 +460,12 @@ function addAlarm(): void {
   if (recurringInput) {
     recurringInput.checked = false;
   }
+  pendingNewAlarmScheduledAt = undefined;
 }
 
 function editAlarm(alarmId: string): void {
   editingAlarmId = alarmId;
+  pendingEditScheduledAt = alarms.find(alarm => alarm.id === alarmId)?.scheduledAt;
   renderAlarms();
   
   // Set up handlers for the edit fields after rerendering
@@ -537,6 +482,7 @@ function editAlarm(alarmId: string): void {
 
 function cancelEdit(alarmId: string): void {
   editingAlarmId = null;
+  pendingEditScheduledAt = undefined;
   renderAlarms();
 }
 
@@ -582,6 +528,7 @@ function saveAlarm(alarmId: string): void {
     hour,
     minute,
     second,
+    scheduledAt: pendingEditScheduledAt,
     // Keep the recurring value unchanged
   };
 
@@ -591,6 +538,7 @@ function saveAlarm(alarmId: string): void {
   }
 
   editingAlarmId = null;
+  pendingEditScheduledAt = undefined;
 }
 
 function deleteAlarm(alarmId: string): void {
@@ -824,6 +772,7 @@ document.addEventListener('DOMContentLoaded', () => {
     electronAPI.getCurrentTimezone().then((info) => {
       currentTimezoneInfo = info;
       updateTimeTimezoneDisplay();
+      renderAlarms();
       if (timeTimezoneInterval) clearInterval(timeTimezoneInterval);
       timeTimezoneInterval = setInterval(updateTimeTimezoneDisplay, 60000);
     });
@@ -1038,6 +987,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const { effective, isSystem } = await electronAPI.setTimezone(selectedTimezoneValue);
       currentTimezoneInfo = { effective, isSystem };
       updateTimeTimezoneDisplay();
+      renderAlarms();
       timezoneCurrentLabel!.textContent = isSystem
         ? `Current: System time zone (${effective})`
         : 'Current: ' + effective;

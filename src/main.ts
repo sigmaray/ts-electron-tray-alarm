@@ -3,6 +3,7 @@ import * as path from 'path';
 import { createCanvas } from 'canvas';
 import { Alarm, createSettingsStore } from './settings';
 import { registerIpcHandlers } from './ipc-handlers';
+import { alarmTimeHasPassedToday, localDateTimeInTimezone, nextAlarmTimestamp, zonedDateTimeToTimestamp } from './time.js';
 
 // Extend the Electron app type with the isQuitting flag
 declare global {
@@ -47,64 +48,6 @@ function getEffectiveTimezone(): string {
     return timezonePref;
   }
   return getSystemTimezone();
-}
-
-// Current local date and time in the specified time zone
-function getLocalTimeInTimezone(tz: string): { year: number; month: number; day: number; hour: number; minute: number; second: number } {
-  const now = new Date();
-  const formatter = new Intl.DateTimeFormat('en-CA', {
-    timeZone: tz,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: false,
-  });
-  const parts = formatter.formatToParts(now);
-  const get = (type: string) => {
-    const p = parts.find(x => x.type === type);
-    return p ? parseInt(p.value, 10) : 0;
-  };
-  return {
-    year: get('year'),
-    month: get('month'),
-    day: get('day'),
-    hour: get('hour'),
-    minute: get('minute'),
-    second: get('second'),
-  };
-}
-
-// UTC timestamp for the given date and time in time zone tz
-function getTimestampInTimezone(tz: string, year: number, month: number, day: number, hour: number, minute: number, second: number): number {
-  const formatter = new Intl.DateTimeFormat('en-CA', {
-    timeZone: tz,
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: false,
-  });
-  const dayNoonUTC = Date.UTC(year, month - 1, day, 12, 0, 0);
-  const parts = formatter.formatToParts(dayNoonUTC);
-  const get = (type: string) => {
-    const p = parts.find(x => x.type === type);
-    return p ? parseInt(p.value, 10) : 0;
-  };
-  const localHour = get('hour');
-  const localMinute = get('minute');
-  const localSecond = get('second');
-  const offsetSec = (localHour * 3600 + localMinute * 60 + localSecond) - 12 * 3600;
-  const offsetMs = offsetSec * 1000;
-  return Date.UTC(year, month - 1, day, hour, minute, second) - offsetMs;
-}
-
-/** Shift a Gregorian calendar date. Date.UTC normalizes month/year boundaries without using the system time zone. */
-function addGregorianCalendarDays(year: number, month: number, day: number, deltaDays: number): { year: number; month: number; day: number } {
-  const ms = Date.UTC(year, month - 1, day + deltaDays);
-  const d = new Date(ms);
-  return { year: d.getUTCFullYear(), month: d.getUTCMonth() + 1, day: d.getUTCDate() };
 }
 
 let countdownWindowVisiblePref = false;
@@ -219,19 +162,13 @@ function getAlarmTimestampOnCalendarDay(
   month: number,
   day: number,
 ): number {
-  return getTimestampInTimezone(tz, year, month, day, alarm.hour, alarm.minute, alarm.second);
+  return zonedDateTimeToTimestamp(tz, { year, month, day, hour: alarm.hour, minute: alarm.minute, second: alarm.second });
 }
 
 function getTimeUntilAlarm(alarm: Alarm): number {
   const tz = getEffectiveTimezone();
-  const now = new Date();
-  const local = getLocalTimeInTimezone(tz);
-  let alarmTs = getAlarmTimestampOnCalendarDay(alarm, tz, local.year, local.month, local.day);
-  if (alarmTs <= now.getTime()) {
-    const next = addGregorianCalendarDays(local.year, local.month, local.day, 1);
-    alarmTs = getAlarmTimestampOnCalendarDay(alarm, tz, next.year, next.month, next.day);
-  }
-  return Math.floor((alarmTs - now.getTime()) / 1000);
+  const now = Date.now();
+  return Math.floor((nextAlarmTimestamp(tz, alarm, now) - now) / 1000);
 }
 
 function getNearestAlarm(): Alarm | null {
@@ -452,7 +389,7 @@ function stopBlinking(): void {
 
 function checkAlarms(): void {
   const tz = getEffectiveTimezone();
-  const local = getLocalTimeInTimezone(tz);
+  const local = localDateTimeInTimezone(tz, Date.now());
   const currentDate = `${local.year}-${String(local.month).padStart(2, '0')}-${String(local.day).padStart(2, '0')}`;
   const nowMs = Date.now();
 
@@ -468,7 +405,7 @@ function checkAlarms(): void {
     // For recurring alarms, check whether this alarm has already fired today
     if (alarm.recurring && triggeredAlarmsToday.has(alarm.id)) continue;
 
-    const fireTs = getAlarmTimestampOnCalendarDay(alarm, tz, local.year, local.month, local.day);
+    const fireTs = alarm.scheduledAt ?? getAlarmTimestampOnCalendarDay(alarm, tz, local.year, local.month, local.day);
     // Fire if the target time has passed, even after an event loop delay or system sleep
     if (nowMs < fireTs) continue;
 
@@ -476,7 +413,11 @@ function checkAlarms(): void {
 
     if (alarm.recurring) {
       triggeredAlarmsToday.add(alarm.id);
+      alarm.scheduledAt = nextAlarmTimestamp(tz, { ...alarm, scheduledAt: undefined }, nowMs);
+      saveAlarms();
+      sendAlarmsToRenderer();
     } else {
+      delete alarm.scheduledAt;
       const index = alarms.findIndex(a => a.id === alarm.id);
       if (index !== -1) {
         alarms[index].enabled = false;
@@ -727,9 +668,14 @@ function initializeApp(): void {
   settingsStore = store;
   // Load settings at startup
   const settings = store.load();
-  alarms = settings.alarms;
   countdownWindowVisiblePref = settings.countdownWindowVisible;
   timezonePref = settings.timezone ?? null;
+  const now = Date.now();
+  alarms = settings.alarms.map(alarm => alarm.enabled && alarm.scheduledAt === undefined
+    && alarmTimeHasPassedToday(getEffectiveTimezone(), alarm, now)
+    ? { ...alarm, scheduledAt: nextAlarmTimestamp(getEffectiveTimezone(), alarm, now) }
+    : alarm);
+  if (alarms.some((alarm, index) => alarm.scheduledAt !== settings.alarms[index].scheduledAt)) saveSettings();
 
   createWindow();
   createTray();
