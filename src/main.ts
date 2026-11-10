@@ -684,26 +684,35 @@ function triggerAlarm(alarm: Alarm): void {
     const dialogWidth = 430;
     const dialogHeight = 300;
     const { x: workAreaX, y: workAreaY, width: workAreaWidth, height: workAreaHeight } = primaryDisplay.workArea;
-    if (alarmDialogWindow && !alarmDialogWindow.isDestroyed()) alarmDialogWindow.destroy();
+    const previousDialog = alarmDialogWindow;
+    alarmDialogWindow = null;
+    activeAlarmDialogId = null;
+    if (previousDialog && !previousDialog.isDestroyed()) previousDialog.destroy();
     activeAlarmDialogId = alarm.id;
     const dialogWindow = new BrowserWindow({
       width: dialogWidth, height: dialogHeight,
       x: workAreaX + Math.round((workAreaWidth - dialogWidth) / 2),
       y: workAreaY + Math.round((workAreaHeight - dialogHeight) / 2),
-      alwaysOnTop: true, resizable: false, closable: false,
+      alwaysOnTop: true, resizable: true, closable: true,
+      minWidth: dialogWidth, minHeight: 240,
       show: false, title: 'Alarm',
       webPreferences: { nodeIntegration: false, contextIsolation: true, preload: path.join(__dirname, 'preload.js') },
     });
     alarmDialogWindow = dialogWindow;
     dialogWindow.loadFile(path.join(__dirname, 'alarm-dialog.html'), { query: {
       alarmId: alarm.id, message: alarm.message?.trim() || `Time: ${String(alarm.hour).padStart(2, '0')}:${String(alarm.minute).padStart(2, '0')}`,
-      postpone: '5',
+      postpone: '300',
     } });
     dialogWindow.once('ready-to-show', () => { if (!dialogWindow.isDestroyed()) dialogWindow.show(); });
     dialogWindow.on('closed', () => {
+      const wasActiveDialog = alarmDialogWindow === dialogWindow && activeAlarmDialogId === alarm.id;
       if (alarmDialogWindow === dialogWindow) {
         alarmDialogWindow = null;
         activeAlarmDialogId = null;
+      }
+      if (wasActiveDialog) {
+        stopBlinking();
+        if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('alarm-dismiss-from-main');
       }
     });
   }
@@ -738,7 +747,7 @@ function previewAlarm(options: { notificationMode: 'window' | 'system' | 'both';
       width, height,
       x: display.workArea.x + Math.round((display.workArea.width - width) / 2),
       y: display.workArea.y + Math.round((display.workArea.height - height) / 2),
-      alwaysOnTop: true, resizable: false, show: false, title: 'Alarm preview',
+      alwaysOnTop: true, resizable: true, show: false, title: 'Alarm preview',
       webPreferences: { nodeIntegration: false, contextIsolation: true, preload: path.join(__dirname, 'preload.js') },
     });
     const previewWindow = alarmPreviewWindow;
@@ -1069,11 +1078,11 @@ function initializeApp(): void {
         mainWindow.webContents.send('timezone-updated', { effective: getEffectiveTimezone(), isSystem: timezonePref === null });
       }
     },
-    postponeAlarm: (alarmId, minutes) => {
-      if (alarmId !== activeAlarmDialogId || !Number.isInteger(minutes) || minutes < 1 || minutes > 60) return { ok: false, error: 'Invalid postpone request.' };
+    postponeAlarm: (alarmId, delaySeconds) => {
+      if (alarmId !== activeAlarmDialogId || !Number.isInteger(delaySeconds) || delaySeconds < 5 || delaySeconds > 1800) return { ok: false, error: 'Invalid postpone request.' };
       const alarm = alarms.find(item => item.id === alarmId);
       if (!alarm) return { ok: false, error: 'Alarm no longer exists.' };
-      const scheduledAt = Date.now() + minutes * 60_000;
+      const scheduledAt = Date.now() + delaySeconds * 1000;
       const local = localDateTimeInTimezone(getEffectiveTimezone(), scheduledAt);
       alarm.enabled = true;
       alarm.completed = undefined;

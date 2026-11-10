@@ -60,7 +60,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   dismissAlarm: () => {
     ipcRenderer.send('alarm-dismiss');
   },
-  postponeAlarm: (alarmId: string, minutes: number) => ipcRenderer.invoke('alarm-postpone', alarmId, minutes) as Promise<AlarmOperationResult>,
+  postponeAlarm: (alarmId: string, delaySeconds: number) => ipcRenderer.invoke('alarm-postpone', alarmId, delaySeconds) as Promise<AlarmOperationResult>,
   previewAlarm: (options: { notificationMode: 'system' | 'window' | 'both'; message?: string; sound: 'classic' | 'digital' | 'gentle' | 'none'; hour: number; minute: number; second: number }) => ipcRenderer.invoke('alarm-preview', options) as Promise<AlarmOperationResult>,
   closeAlarmPreview: () => ipcRenderer.send('alarm-preview-close'),
   onAlarmPreviewClosed: (callback: () => void) => ipcRenderer.on('alarm-preview-closed', () => callback()),

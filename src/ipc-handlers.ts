@@ -15,7 +15,7 @@ export interface IpcDependencies {
   showCountdownWindowMenu(): void;
   resizeCountdownWindow(width: number, height: number): void;
   stopBlinking(): void;
-  postponeAlarm(alarmId: string, minutes: number): { ok: boolean; error?: string };
+  postponeAlarm(alarmId: string, delaySeconds: number): { ok: boolean; error?: string };
   previewAlarm(options: { notificationMode: 'system' | 'window' | 'both'; message?: string; sound: 'classic' | 'digital' | 'gentle' | 'none'; hour: number; minute: number; second: number }): void;
   closeAlarmPreview(): void;
   closeAlarmCreationWindow(): void;
@@ -85,7 +85,7 @@ export function registerIpcHandlers(deps: IpcDependencies, handlers: IpcMain = i
   handlers.handle('get-app-preferences', () => deps.getAppPreferences());
   handlers.handle('save-app-preferences', (_event, value: unknown) => deps.saveAppPreferences(value));
   handlers.on('alarm-dismiss', () => { deps.stopBlinking(); deps.notifyAlarmDismissed(); });
-  handlers.handle('alarm-postpone', (_event, alarmId: string, minutes: number) => deps.postponeAlarm(alarmId, minutes));
+  handlers.handle('alarm-postpone', (_event, alarmId: string, delaySeconds: number) => deps.postponeAlarm(alarmId, delaySeconds));
   handlers.handle('alarm-preview', (_event, value: unknown) => {
     if (!value || typeof value !== 'object' || Array.isArray(value)) return { ok: false, error: 'Invalid preview settings.' };
     const options = value as Record<string, unknown>;
