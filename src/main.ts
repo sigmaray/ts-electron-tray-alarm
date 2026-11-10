@@ -23,6 +23,10 @@ let alarmPreviewWindow: BrowserWindow | null = null;
 let alarmCreationWindow: BrowserWindow | null = null;
 let activeAlarmDialogId: string | null = null;
 let tray: Tray | null = null;
+let trayContextMenu: Menu | null = null;
+let trayMenuOpen = false;
+let lastTrayIconKey: string | null = null;
+let lastTrayTooltip: string | null = null;
 
 // Control whether only one app instance may run
 const ALLOW_ONLY_ONE_INSTANCE = process.env.ALLOW_ONLY_ONE_INSTANCE !== 'false';
@@ -129,6 +133,7 @@ function buildNewInMenu(): Electron.MenuItemConstructorOptions {
     { label: '2 hours', seconds: 7200 },
   ];
   return {
+    id: 'tray-new-in',
     label: 'New in',
     submenu: shortcuts.map(item => ({
       label: item.label,
@@ -140,10 +145,25 @@ function buildNewInMenu(): Electron.MenuItemConstructorOptions {
 function updateTrayMenu(): void {
   if (!tray) return;
   const isVisible = mainWindow?.isVisible() ?? false;
-  const toggleLabel = isVisible ? 'Minimize to Tray' : 'Show';
+  const toggleLabel = isVisible ? 'Hide main window' : 'Show main window';
+  const isCountdownVisible = !!(countdownWindow && !countdownWindow.isDestroyed());
 
-  const contextMenu = Menu.buildFromTemplate([
+  if (trayContextMenu) {
+    const mainWindowItem = trayContextMenu.getMenuItemById('tray-main-window');
+    const countdownWindowItem = trayContextMenu.getMenuItemById('tray-countdown-window');
+    if (mainWindowItem) mainWindowItem.label = toggleLabel;
+    if (countdownWindowItem) countdownWindowItem.checked = isCountdownVisible;
+    if (!trayMenuOpen) tray.setContextMenu(trayContextMenu);
+    return;
+  }
+
+  trayContextMenu = Menu.buildFromTemplate([
     {
+      label: 'New alarm',
+      click: () => openNewAlarmDialog(null),
+    },
+    {
+      id: 'tray-main-window',
       label: toggleLabel,
       click: () => {
         if (!mainWindow) return;
@@ -154,7 +174,18 @@ function updateTrayMenu(): void {
           mainWindow.focus();
         }
         updateTrayMenu();
+        setTimeout(() => {
+          trayMenuOpen = false;
+          updateTrayMenu();
+        }, 100);
       },
+    },
+    {
+      id: 'tray-countdown-window',
+      label: 'Show countdown window',
+      type: 'checkbox',
+      checked: isCountdownVisible,
+      click: () => toggleCountdownWindow(),
     },
     {
       label: 'Quit',
@@ -162,7 +193,13 @@ function updateTrayMenu(): void {
     },
   ]);
 
-  tray.setContextMenu(contextMenu);
+  trayContextMenu.on('menu-will-show', () => { trayMenuOpen = true; });
+  trayContextMenu.on('menu-will-close', () => {
+    trayMenuOpen = false;
+    updateTrayMenu();
+    updateTrayIcon();
+  });
+  tray.setContextMenu(trayContextMenu);
 }
 
 function createTextIcon(text: string, isBlinking: boolean = false): Electron.NativeImage {
@@ -273,35 +310,27 @@ function formatTimeForTray(seconds: number): string {
 }
 
 function formatTimeForTooltip(seconds: number): string {
-  if (seconds <= 0) return '0s';
-  
-  const hours = Math.floor(seconds / 3600);
-  const minutes = Math.floor((seconds % 3600) / 60);
-  const secs = Math.floor(seconds % 60);
-  
-  const parts: string[] = [];
-  if (hours > 0) {
-    parts.push(`${hours}h`);
-  }
-  if (minutes > 0) {
-    parts.push(`${minutes}m`);
-  }
-  if (secs > 0 || parts.length === 0) {
-    parts.push(`${secs}s`);
-  }
-  
-  return parts.join(' ');
+  if (seconds <= 0) return 'now';
+  const totalMinutes = Math.ceil(seconds / 60);
+  if (totalMinutes < 60) return `${totalMinutes}m`;
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return minutes === 0 ? `${hours}h` : `${hours}h ${minutes}m`;
 }
 
 function updateTrayIcon(): void {
-  if (!tray) return;
+  if (!tray || trayMenuOpen) return;
   
-  let icon: Electron.NativeImage;
+  let iconKey: string;
+  let iconText: string;
+  let iconIsBlinking = false;
   let tooltipText: string;
   
   if (isAlarmActive) {
     // Blink a red icon with an exclamation mark
-    icon = createTextIcon('!', isBlinking);
+    iconText = '!';
+    iconIsBlinking = isBlinking;
+    iconKey = `alarm:${isBlinking}`;
     tooltipText = '⏰ Alarm!';
   } else {
     const nearestAlarm = getNearestAlarm();
@@ -309,18 +338,26 @@ function updateTrayIcon(): void {
     if (nearestAlarm) {
       const timeUntil = getTimeUntilAlarm(nearestAlarm);
       const text = formatTimeForTray(timeUntil);
-      icon = createTextIcon(text, false);
+      iconText = text;
+      iconKey = `countdown:${text}`;
       
       const alarmTime = `${String(nearestAlarm.hour).padStart(2, '0')}:${String(nearestAlarm.minute).padStart(2, '0')}:${String(nearestAlarm.second).padStart(2, '0')}`;
       tooltipText = `Alarm: ${alarmTime} (in ${formatTimeForTooltip(timeUntil)})`;
     } else {
-      icon = createTextIcon('—', false);
+      iconText = '—';
+      iconKey = 'empty';
       tooltipText = 'No alarm set';
     }
   }
-  
-  tray.setImage(icon);
-  tray.setToolTip(tooltipText);
+
+  if (iconKey !== lastTrayIconKey) {
+    tray.setImage(createTextIcon(iconText, iconIsBlinking));
+    lastTrayIconKey = iconKey;
+  }
+  if (tooltipText !== lastTrayTooltip) {
+    tray.setToolTip(tooltipText);
+    lastTrayTooltip = tooltipText;
+  }
 }
 
 function formatTimeForCountdownWindow(seconds: number): string {
