@@ -53,19 +53,27 @@ test('parseSettings keeps valid color overrides and discards malformed hex value
     trayIconColor: '#12AbEf',
     countdownBackgroundColor: '#abcdef',
     mainWindowBackgroundColor: '#F8F9FA',
+    sectionHeaderBackgroundColor: '#0D6EFd',
+    sectionBackgroundColor: '#ffffff',
   });
   assert.equal(parsed.trayIconColor, '#12abef');
   assert.equal(parsed.countdownBackgroundColor, '#abcdef');
   assert.equal(parsed.mainWindowBackgroundColor, '#f8f9fa');
+  assert.equal(parsed.sectionHeaderBackgroundColor, '#0d6efd');
+  assert.equal(parsed.sectionBackgroundColor, '#ffffff');
 
   const malformed = parseSettings({
     trayIconColor: '#123',
     countdownBackgroundColor: 'red',
     mainWindowBackgroundColor: '#12345g',
+    sectionHeaderBackgroundColor: '#12345',
+    sectionBackgroundColor: 'transparent',
   });
   assert.equal(malformed.trayIconColor, undefined);
   assert.equal(malformed.countdownBackgroundColor, undefined);
   assert.equal(malformed.mainWindowBackgroundColor, undefined);
+  assert.equal(malformed.sectionHeaderBackgroundColor, undefined);
+  assert.equal(malformed.sectionBackgroundColor, undefined);
 });
 
 test('parseAlarms replaces unsafe and duplicate IDs', () => {

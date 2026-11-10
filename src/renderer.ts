@@ -43,8 +43,15 @@ interface ElectronAPI {
   getAppPreferences: () => Promise<{
     mainWindowBackgroundColor: string;
     countdownBackgroundColor: string;
+    sectionHeaderBackgroundColor: string;
+    sectionBackgroundColor: string;
   }>;
-  onAppColorsUpdated: (callback: (colors: { mainWindowBackgroundColor: string; countdownBackgroundColor: string }) => void) => void;
+  onAppColorsUpdated: (callback: (colors: {
+    mainWindowBackgroundColor: string;
+    countdownBackgroundColor: string;
+    sectionHeaderBackgroundColor: string;
+    sectionBackgroundColor: string;
+  }) => void) => void;
 }
 
 let alarms: Alarm[] = [];
@@ -590,9 +597,21 @@ function clearPendingNewAlarm(): void {
 // Initialize when the page loads
 document.addEventListener('DOMContentLoaded', () => {
   const electronAPI = (window as any).electronAPI as ElectronAPI | undefined;
-  const applyColors = (colors: { mainWindowBackgroundColor: string }) => {
-    if (isStandaloneAddWindow || !/^#[0-9a-f]{6}$/i.test(colors.mainWindowBackgroundColor)) return;
-    document.body.style.setProperty('background-color', colors.mainWindowBackgroundColor, 'important');
+  const applyColors = (colors: {
+    mainWindowBackgroundColor: string;
+    sectionHeaderBackgroundColor: string;
+    sectionBackgroundColor: string;
+  }) => {
+    if (isStandaloneAddWindow) return;
+    if (/^#[0-9a-f]{6}$/i.test(colors.mainWindowBackgroundColor)) {
+      document.body.style.setProperty('background-color', colors.mainWindowBackgroundColor, 'important');
+    }
+    if (/^#[0-9a-f]{6}$/i.test(colors.sectionHeaderBackgroundColor)) {
+      document.documentElement.style.setProperty('--section-header-background-color', colors.sectionHeaderBackgroundColor);
+    }
+    if (/^#[0-9a-f]{6}$/i.test(colors.sectionBackgroundColor)) {
+      document.documentElement.style.setProperty('--section-background-color', colors.sectionBackgroundColor);
+    }
   };
   electronAPI?.onAppColorsUpdated(applyColors);
   void electronAPI?.getAppPreferences().then(applyColors);

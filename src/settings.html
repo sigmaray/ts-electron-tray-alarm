@@ -87,6 +87,22 @@
             <input id="mainWindowBackgroundColorHex" class="form-control font-monospace" type="text" value="#f8f9fa" maxlength="7" pattern="#[0-9a-fA-F]{6}" placeholder="#f8f9fa" aria-label="Main window background HEX color" autocomplete="off" spellcheck="false">
           </div>
         </div>
+        <div class="mt-3">
+          <label class="form-label" for="sectionHeaderBackgroundColor">Section header background</label>
+          <div class="input-group">
+            <input id="sectionHeaderBackgroundColor" class="form-control form-control-color flex-shrink-0" style="width: 3.5rem" type="color" value="#0d6efd" title="Choose section header background color">
+            <span class="input-group-text">HEX</span>
+            <input id="sectionHeaderBackgroundColorHex" class="form-control font-monospace" type="text" value="#0d6efd" maxlength="7" pattern="#[0-9a-fA-F]{6}" placeholder="#0d6efd" aria-label="Section header background HEX color" autocomplete="off" spellcheck="false">
+          </div>
+        </div>
+        <div class="mt-3">
+          <label class="form-label" for="sectionBackgroundColor">Section background</label>
+          <div class="input-group">
+            <input id="sectionBackgroundColor" class="form-control form-control-color flex-shrink-0" style="width: 3.5rem" type="color" value="#ffffff" title="Choose section background color">
+            <span class="input-group-text">HEX</span>
+            <input id="sectionBackgroundColorHex" class="form-control font-monospace" type="text" value="#ffffff" maxlength="7" pattern="#[0-9a-fA-F]{6}" placeholder="#ffffff" aria-label="Section background HEX color" autocomplete="off" spellcheck="false">
+          </div>
+        </div>
         <button id="resetColors" class="btn btn-link px-0 pb-0">Reset colors to defaults</button>
       </div>
     </section>
@@ -109,10 +125,14 @@
     const trayIconColor = document.getElementById('trayIconColor');
     const countdownBackgroundColor = document.getElementById('countdownBackgroundColor');
     const mainWindowBackgroundColor = document.getElementById('mainWindowBackgroundColor');
+    const sectionHeaderBackgroundColor = document.getElementById('sectionHeaderBackgroundColor');
+    const sectionBackgroundColor = document.getElementById('sectionBackgroundColor');
     const colorPairs = [
       { picker: trayIconColor, hex: document.getElementById('trayIconColorHex') },
       { picker: countdownBackgroundColor, hex: document.getElementById('countdownBackgroundColorHex') },
       { picker: mainWindowBackgroundColor, hex: document.getElementById('mainWindowBackgroundColorHex') },
+      { picker: sectionHeaderBackgroundColor, hex: document.getElementById('sectionHeaderBackgroundColorHex') },
+      { picker: sectionBackgroundColor, hex: document.getElementById('sectionBackgroundColorHex') },
     ];
     const status = document.getElementById('settingsStatus');
 
@@ -155,6 +175,8 @@
         trayIconColor.value = preferences.trayIconColor || '#5b7fa6';
         countdownBackgroundColor.value = preferences.countdownBackgroundColor || '#5b7fa6';
         mainWindowBackgroundColor.value = preferences.mainWindowBackgroundColor || '#f8f9fa';
+        sectionHeaderBackgroundColor.value = preferences.sectionHeaderBackgroundColor || '#0d6efd';
+        sectionBackgroundColor.value = preferences.sectionBackgroundColor || '#ffffff';
         colorPairs.forEach(pair => { pair.hex.value = pair.picker.value; });
       } catch (error) {
         status.textContent = `Could not load settings: ${error.message || error}`;
@@ -182,6 +204,8 @@
           trayIconColor: colorPairs[0].hex.value.trim().toLowerCase(),
           countdownBackgroundColor: colorPairs[1].hex.value.trim().toLowerCase(),
           mainWindowBackgroundColor: colorPairs[2].hex.value.trim().toLowerCase(),
+          sectionHeaderBackgroundColor: colorPairs[3].hex.value.trim().toLowerCase(),
+          sectionBackgroundColor: colorPairs[4].hex.value.trim().toLowerCase(),
         });
         if (!result.ok) throw new Error(result.error || 'Could not save settings.');
         status.textContent = closeAfterSave ? 'Settings saved.' : 'Settings applied.';
@@ -196,7 +220,7 @@
     document.getElementById('settingsSave').addEventListener('click', () => saveSettings(true));
     document.getElementById('settingsCancel').addEventListener('click', () => window.close());
     document.getElementById('resetColors').addEventListener('click', () => {
-      const defaults = ['#5b7fa6', '#5b7fa6', '#f8f9fa'];
+      const defaults = ['#5b7fa6', '#5b7fa6', '#f8f9fa', '#0d6efd', '#ffffff'];
       colorPairs.forEach((pair, index) => {
         pair.picker.value = defaults[index];
         pair.hex.value = defaults[index];

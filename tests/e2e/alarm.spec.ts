@@ -531,6 +531,16 @@ test.describe('Alarm application', () => {
     });
     await expect(countdownHex).toHaveValue('#a1b2c3');
 
+    const sectionHeaderHex = settingsWindow.locator('#sectionHeaderBackgroundColorHex');
+    await sectionHeaderHex.fill('#123abc');
+    await expect(settingsWindow.locator('#sectionHeaderBackgroundColor')).toHaveValue('#123abc');
+    const sectionBackgroundHex = settingsWindow.locator('#sectionBackgroundColorHex');
+    await settingsWindow.locator('#sectionBackgroundColor').evaluate((input: HTMLInputElement) => {
+      input.value = '#d0e0f0';
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await expect(sectionBackgroundHex).toHaveValue('#d0e0f0');
+
     const mainHex = settingsWindow.locator('#mainWindowBackgroundColorHex');
     const colorBeforeInvalidSave = JSON.parse(fs.readFileSync(settingsPath, 'utf8')).trayIconColor;
     await mainHex.fill('#12');
@@ -547,7 +557,13 @@ test.describe('Alarm application', () => {
       trayIconColor: '#12abef',
       countdownBackgroundColor: '#a1b2c3',
       mainWindowBackgroundColor: '#334455',
+      sectionHeaderBackgroundColor: '#123abc',
+      sectionBackgroundColor: '#d0e0f0',
     });
+    await expect.poll(() => window.evaluate(() => ({
+      header: document.documentElement.style.getPropertyValue('--section-header-background-color'),
+      section: document.documentElement.style.getPropertyValue('--section-background-color'),
+    }))).toEqual({ header: '#123abc', section: '#d0e0f0' });
 
     await settingsWindow.locator('#settingsSave').click();
     await expect.poll(() => settingsWindow.isClosed()).toBe(true);
@@ -558,6 +574,8 @@ test.describe('Alarm application', () => {
     await expect(reopenedSettings.locator('#trayIconColorHex')).toHaveValue('#12abef');
     await expect(reopenedSettings.locator('#countdownBackgroundColorHex')).toHaveValue('#a1b2c3');
     await expect(reopenedSettings.locator('#mainWindowBackgroundColorHex')).toHaveValue('#334455');
+    await expect(reopenedSettings.locator('#sectionHeaderBackgroundColorHex')).toHaveValue('#123abc');
+    await expect(reopenedSettings.locator('#sectionBackgroundColorHex')).toHaveValue('#d0e0f0');
     await reopenedSettings.locator('#resetColors').click();
     await reopenedSettings.locator('#settingsApply').click();
     await expect(reopenedSettings.locator('#settingsStatus')).toHaveText('Settings applied.');

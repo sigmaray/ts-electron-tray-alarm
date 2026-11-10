@@ -32,6 +32,8 @@ export interface AppPreferences {
   trayIconColor: string;
   countdownBackgroundColor: string;
   mainWindowBackgroundColor: string;
+  sectionHeaderBackgroundColor: string;
+  sectionBackgroundColor: string;
 }
 
 // Expose a safe API to the renderer process
@@ -55,6 +57,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     trayIconColor: string;
     countdownBackgroundColor: string;
     mainWindowBackgroundColor: string;
+    sectionHeaderBackgroundColor: string;
+    sectionBackgroundColor: string;
   }>,
   saveAppPreferences: (preferences: {
     confirmQuit: boolean;
@@ -64,6 +68,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     trayIconColor: string;
     countdownBackgroundColor: string;
     mainWindowBackgroundColor: string;
+    sectionHeaderBackgroundColor: string;
+    sectionBackgroundColor: string;
   }) =>
     ipcRenderer.invoke('save-app-preferences', preferences) as Promise<{ ok: boolean; error?: string }>,
   // Alarm commands
@@ -122,7 +128,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onCountdownBackgroundColor: (callback: (color: string) => void) => {
     ipcRenderer.on('countdown-background-color', (_event, color: string) => callback(color));
   },
-  onAppColorsUpdated: (callback: (colors: Pick<AppPreferences, 'mainWindowBackgroundColor' | 'countdownBackgroundColor'>) => void) => {
+  onAppColorsUpdated: (callback: (colors: Pick<AppPreferences, 'mainWindowBackgroundColor' | 'countdownBackgroundColor' | 'sectionHeaderBackgroundColor' | 'sectionBackgroundColor'>) => void) => {
     ipcRenderer.on('app-colors-updated', (_event, colors) => callback(colors));
   },
   // Time zone

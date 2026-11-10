@@ -32,6 +32,8 @@ export interface AppSettings {
   trayIconColor?: string;
   countdownBackgroundColor?: string;
   mainWindowBackgroundColor?: string;
+  sectionHeaderBackgroundColor?: string;
+  sectionBackgroundColor?: string;
 }
 
 export interface CountdownWindowPosition {
@@ -55,6 +57,8 @@ export const DEFAULT_SETTINGS: AppSettings = { alarms: [], countdownWindowVisibl
 export const DEFAULT_TRAY_ICON_COLOR = '#5b7fa6';
 export const DEFAULT_COUNTDOWN_BACKGROUND_COLOR = '#5b7fa6';
 export const DEFAULT_MAIN_WINDOW_BACKGROUND_COLOR = '#f8f9fa';
+export const DEFAULT_SECTION_HEADER_BACKGROUND_COLOR = '#0d6efd';
+export const DEFAULT_SECTION_BACKGROUND_COLOR = '#ffffff';
 
 export function normalizeHexColor(value: unknown): string | null {
   if (typeof value !== 'string' || !/^#[0-9a-fA-F]{6}$/.test(value)) return null;
@@ -199,6 +203,8 @@ export function parseSettings(raw: unknown): AppSettings {
     ...(normalizeHexColor(value.trayIconColor) ? { trayIconColor: normalizeHexColor(value.trayIconColor)! } : {}),
     ...(normalizeHexColor(value.countdownBackgroundColor) ? { countdownBackgroundColor: normalizeHexColor(value.countdownBackgroundColor)! } : {}),
     ...(normalizeHexColor(value.mainWindowBackgroundColor) ? { mainWindowBackgroundColor: normalizeHexColor(value.mainWindowBackgroundColor)! } : {}),
+    ...(normalizeHexColor(value.sectionHeaderBackgroundColor) ? { sectionHeaderBackgroundColor: normalizeHexColor(value.sectionHeaderBackgroundColor)! } : {}),
+    ...(normalizeHexColor(value.sectionBackgroundColor) ? { sectionBackgroundColor: normalizeHexColor(value.sectionBackgroundColor)! } : {}),
   };
 }
 

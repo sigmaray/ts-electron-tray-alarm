@@ -4,6 +4,7 @@ import { createCanvas } from 'canvas';
 import {
   Alarm, CountdownWindowPosition, createSettingsStore, normalizeHexColor,
   DEFAULT_TRAY_ICON_COLOR, DEFAULT_COUNTDOWN_BACKGROUND_COLOR, DEFAULT_MAIN_WINDOW_BACKGROUND_COLOR,
+  DEFAULT_SECTION_HEADER_BACKGROUND_COLOR, DEFAULT_SECTION_BACKGROUND_COLOR,
 } from './settings';
 import { registerIpcHandlers } from './ipc-handlers';
 import { scheduleAlarm } from './alarm-scheduling';
@@ -88,6 +89,8 @@ let countdownFontSizePref = 15;
 let trayIconColorPref = DEFAULT_TRAY_ICON_COLOR;
 let countdownBackgroundColorPref = DEFAULT_COUNTDOWN_BACKGROUND_COLOR;
 let mainWindowBackgroundColorPref = DEFAULT_MAIN_WINDOW_BACKGROUND_COLOR;
+let sectionHeaderBackgroundColorPref = DEFAULT_SECTION_HEADER_BACKGROUND_COLOR;
+let sectionBackgroundColorPref = DEFAULT_SECTION_BACKGROUND_COLOR;
 
 function saveSettings(): void {
   settingsStore?.save({
@@ -98,6 +101,8 @@ function saveSettings(): void {
     trayIconColor: trayIconColorPref,
     countdownBackgroundColor: countdownBackgroundColorPref,
     mainWindowBackgroundColor: mainWindowBackgroundColorPref,
+    sectionHeaderBackgroundColor: sectionHeaderBackgroundColorPref,
+    sectionBackgroundColor: sectionBackgroundColorPref,
   });
 }
 
@@ -969,6 +974,8 @@ function createWindow(): void {
     mainWindow?.webContents.send('app-colors-updated', {
       mainWindowBackgroundColor: mainWindowBackgroundColorPref,
       countdownBackgroundColor: countdownBackgroundColorPref,
+      sectionHeaderBackgroundColor: sectionHeaderBackgroundColorPref,
+      sectionBackgroundColor: sectionBackgroundColorPref,
     });
   });
 
@@ -1071,6 +1078,8 @@ function initializeApp(): void {
   trayIconColorPref = settings.trayIconColor ?? DEFAULT_TRAY_ICON_COLOR;
   countdownBackgroundColorPref = settings.countdownBackgroundColor ?? DEFAULT_COUNTDOWN_BACKGROUND_COLOR;
   mainWindowBackgroundColorPref = settings.mainWindowBackgroundColor ?? DEFAULT_MAIN_WINDOW_BACKGROUND_COLOR;
+  sectionHeaderBackgroundColorPref = settings.sectionHeaderBackgroundColor ?? DEFAULT_SECTION_HEADER_BACKGROUND_COLOR;
+  sectionBackgroundColorPref = settings.sectionBackgroundColor ?? DEFAULT_SECTION_BACKGROUND_COLOR;
   const now = Date.now();
   alarms = settings.alarms.map(alarm => scheduleAlarm(alarm, getEffectiveTimezone(), now));
   if (alarms.some((alarm, index) => alarm.scheduledAt !== settings.alarms[index].scheduledAt)) saveSettings();
@@ -1127,6 +1136,8 @@ function initializeApp(): void {
       trayIconColor: trayIconColorPref,
       countdownBackgroundColor: countdownBackgroundColorPref,
       mainWindowBackgroundColor: mainWindowBackgroundColorPref,
+      sectionHeaderBackgroundColor: sectionHeaderBackgroundColorPref,
+      sectionBackgroundColor: sectionBackgroundColorPref,
     }),
     saveAppPreferences: value => {
       if (!value || typeof value !== 'object' || Array.isArray(value)) return { ok: false, error: 'Invalid settings.' };
@@ -1137,7 +1148,9 @@ function initializeApp(): void {
         || !Number.isInteger(candidate.countdownFontSize) || Number(candidate.countdownFontSize) < 8 || Number(candidate.countdownFontSize) > 32
         || (candidate.trayIconColor !== undefined && !normalizeHexColor(candidate.trayIconColor))
         || (candidate.countdownBackgroundColor !== undefined && !normalizeHexColor(candidate.countdownBackgroundColor))
-        || (candidate.mainWindowBackgroundColor !== undefined && !normalizeHexColor(candidate.mainWindowBackgroundColor))) {
+        || (candidate.mainWindowBackgroundColor !== undefined && !normalizeHexColor(candidate.mainWindowBackgroundColor))
+        || (candidate.sectionHeaderBackgroundColor !== undefined && !normalizeHexColor(candidate.sectionHeaderBackgroundColor))
+        || (candidate.sectionBackgroundColor !== undefined && !normalizeHexColor(candidate.sectionBackgroundColor))) {
         return { ok: false, error: 'Invalid settings.' };
       }
       confirmQuitPref = candidate.confirmQuit;
@@ -1147,6 +1160,8 @@ function initializeApp(): void {
       trayIconColorPref = normalizeHexColor(candidate.trayIconColor) ?? trayIconColorPref;
       countdownBackgroundColorPref = normalizeHexColor(candidate.countdownBackgroundColor) ?? countdownBackgroundColorPref;
       mainWindowBackgroundColorPref = normalizeHexColor(candidate.mainWindowBackgroundColor) ?? mainWindowBackgroundColorPref;
+      sectionHeaderBackgroundColorPref = normalizeHexColor(candidate.sectionHeaderBackgroundColor) ?? sectionHeaderBackgroundColorPref;
+      sectionBackgroundColorPref = normalizeHexColor(candidate.sectionBackgroundColor) ?? sectionBackgroundColorPref;
       saveSettings();
       updateTrayIcon();
       updateCountdownWindow();
@@ -1154,6 +1169,8 @@ function initializeApp(): void {
         mainWindow.webContents.send('app-colors-updated', {
           mainWindowBackgroundColor: mainWindowBackgroundColorPref,
           countdownBackgroundColor: countdownBackgroundColorPref,
+          sectionHeaderBackgroundColor: sectionHeaderBackgroundColorPref,
+          sectionBackgroundColor: sectionBackgroundColorPref,
         });
       }
       if (countdownWindow && !countdownWindow.isDestroyed()) {
