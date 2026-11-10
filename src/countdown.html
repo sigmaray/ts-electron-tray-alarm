@@ -23,6 +23,8 @@
     .countdown-widget {
       background-color: #5B7FA6FF !important;
       font-size: var(--countdown-font-size, 15pt);
+      width: max-content;
+      flex: 0 0 auto;
       padding: .35em .5em;
       gap: .75em;
       user-select: none;
@@ -72,6 +74,16 @@
   </div>
   <script>
     (function() {
+      const widget = document.querySelector('.countdown-widget');
+      if (widget && window.electronAPI && typeof window.electronAPI.resizeCountdownWindow === 'function') {
+        const resizeWindowToWidget = function() {
+          const bounds = widget.getBoundingClientRect();
+          window.electronAPI.resizeCountdownWindow(Math.ceil(bounds.width), Math.ceil(bounds.height));
+        };
+        new ResizeObserver(resizeWindowToWidget).observe(widget);
+        requestAnimationFrame(resizeWindowToWidget);
+      }
+
       const el = document.getElementById('countdown-display');
       if (window.electronAPI && typeof window.electronAPI.onCountdownUpdate === 'function') {
         window.electronAPI.onCountdownUpdate(function(text) {
@@ -87,7 +99,6 @@
           menuButton.style.setProperty('display', visible ? 'flex' : 'none', 'important');
         });
       }
-      const widget = document.querySelector('.countdown-widget');
       if (widget && window.electronAPI && typeof window.electronAPI.onCountdownFontSize === 'function') {
         window.electronAPI.onCountdownFontSize(function(size) {
           const points = Number.isInteger(size) && size >= 8 && size <= 32 ? size : 15;

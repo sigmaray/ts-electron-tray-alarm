@@ -89,6 +89,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.send('countdown-window-close');
   },
   showCountdownWindowMenu: () => ipcRenderer.send('countdown-window-menu'),
+  resizeCountdownWindow: (width: number, height: number) => ipcRenderer.send('countdown-window-resize', width, height),
   onCountdownWindowState: (callback: (visible: boolean) => void) => {
     ipcRenderer.on('countdown-window-state', (_event, visible: boolean) => callback(visible));
   },

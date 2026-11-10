@@ -406,8 +406,8 @@ function showCountdownWindowMenu(): void {
   menu.popup({ window: countdownWindow });
 }
 
-const COUNTDOWN_WINDOW_WIDTH = 280;
-const COUNTDOWN_WINDOW_HEIGHT = 70;
+let COUNTDOWN_WINDOW_WIDTH = 280;
+let COUNTDOWN_WINDOW_HEIGHT = 70;
 
 function standardCountdownWindowPosition(display: Electron.Display = screen.getPrimaryDisplay()): CountdownWindowPosition {
   const { x, y, width, height } = display.workArea;
@@ -575,6 +575,15 @@ function destroyCountdownWindow(): void {
   countdownWindowVisiblePref = false;
   saveSettings();
   sendCountdownWindowState();
+}
+
+function resizeCountdownWindow(width: number, height: number): void {
+  if (!countdownWindow || countdownWindow.isDestroyed()) return;
+  if (countdownWindow.getContentSize()[0] === width && countdownWindow.getContentSize()[1] === height) return;
+  COUNTDOWN_WINDOW_WIDTH = width;
+  COUNTDOWN_WINDOW_HEIGHT = height;
+  countdownWindow.setContentSize(width, height);
+  rememberCountdownWindowPosition();
 }
 
 function toggleCountdownWindow(): void {
@@ -1012,6 +1021,7 @@ function initializeApp(): void {
     toggleCountdownWindow,
     destroyCountdownWindow,
     showCountdownWindowMenu,
+    resizeCountdownWindow,
     stopBlinking,
     notifyAlarmDismissed: () => {
       if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('alarm-dismiss-from-main');

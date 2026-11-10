@@ -13,6 +13,7 @@ export interface IpcDependencies {
   toggleCountdownWindow(): void;
   destroyCountdownWindow(): void;
   showCountdownWindowMenu(): void;
+  resizeCountdownWindow(width: number, height: number): void;
   stopBlinking(): void;
   postponeAlarm(alarmId: string, minutes: number): { ok: boolean; error?: string };
   previewAlarm(options: { notificationMode: 'system' | 'window' | 'both'; message?: string; sound: 'classic' | 'digital' | 'gentle' | 'none'; hour: number; minute: number; second: number }): void;
@@ -104,6 +105,13 @@ export function registerIpcHandlers(deps: IpcDependencies, handlers: IpcMain = i
   handlers.on('countdown-window-toggle', () => deps.toggleCountdownWindow());
   handlers.on('countdown-window-close', () => deps.destroyCountdownWindow());
   handlers.on('countdown-window-menu', () => deps.showCountdownWindowMenu());
+  handlers.on('countdown-window-resize', (_event, width: unknown, height: unknown) => {
+    if (Number.isInteger(width) && Number.isInteger(height)
+      && Number(width) >= 1 && Number(width) <= 2000
+      && Number(height) >= 1 && Number(height) <= 1000) {
+      deps.resizeCountdownWindow(Number(width), Number(height));
+    }
+  });
   handlers.handle('get-timezones', (): string[] => {
     const intl = Intl as typeof Intl & { supportedValuesOf?(key: string): string[] };
     return typeof intl.supportedValuesOf === 'function' ? intl.supportedValuesOf('timeZone') : [
