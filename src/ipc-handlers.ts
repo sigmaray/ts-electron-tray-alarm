@@ -17,6 +17,7 @@ export interface IpcDependencies {
   postponeAlarm(alarmId: string, minutes: number): { ok: boolean; error?: string };
   previewAlarm(options: { notificationMode: 'system' | 'window' | 'both'; message?: string; sound: 'classic' | 'digital' | 'gentle' | 'none'; hour: number; minute: number; second: number }): void;
   closeAlarmPreview(): void;
+  closeAlarmCreationWindow(): void;
   notifyAlarmDismissed(): void;
   openSettingsWindow(): void;
   requestQuit(): void;
@@ -99,6 +100,7 @@ export function registerIpcHandlers(deps: IpcDependencies, handlers: IpcMain = i
     return { ok: true };
   });
   handlers.on('alarm-preview-close', () => deps.closeAlarmPreview());
+  handlers.on('alarm-creation-window-close', () => deps.closeAlarmCreationWindow());
   handlers.on('countdown-window-toggle', () => deps.toggleCountdownWindow());
   handlers.on('countdown-window-close', () => deps.destroyCountdownWindow());
   handlers.on('countdown-window-menu', () => deps.showCountdownWindowMenu());

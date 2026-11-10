@@ -20,6 +20,7 @@ let settingsWindow: BrowserWindow | null = null;
 let countdownWindow: BrowserWindow | null = null;
 let alarmDialogWindow: BrowserWindow | null = null;
 let alarmPreviewWindow: BrowserWindow | null = null;
+let alarmCreationWindow: BrowserWindow | null = null;
 let activeAlarmId: string | null = null;
 let tray: Tray | null = null;
 
@@ -55,7 +56,7 @@ function getEffectiveTimezone(): string {
   return getSystemTimezone();
 }
 
-let countdownWindowVisiblePref = false;
+let countdownWindowVisiblePref = true;
 let countdownWindowPosition: CountdownWindowPosition | undefined;
 let countdownPositionSaveTimer: NodeJS.Timeout | null = null;
 let timezonePref: string | null = null; // null means use the system time zone
@@ -88,6 +89,52 @@ async function requestQuit(): Promise<void> {
 // Save alarms and all other settings to disk
 function saveAlarms(): void {
   saveSettings();
+}
+
+function openNewAlarmDialog(seconds: number | null): void {
+  if (alarmCreationWindow && !alarmCreationWindow.isDestroyed()) {
+    alarmCreationWindow.focus();
+    return;
+  }
+  const display = screen.getPrimaryDisplay();
+  const width = Math.min(620, display.workArea.width);
+  const height = Math.min(820, display.workArea.height);
+  alarmCreationWindow = new BrowserWindow({
+    width, height,
+    x: display.workArea.x + Math.round((display.workArea.width - width) / 2),
+    y: display.workArea.y + Math.round((display.workArea.height - height) / 2),
+    minWidth: Math.min(500, width), minHeight: Math.min(620, height),
+    resizable: true, show: false, title: 'Add alarm',
+    webPreferences: { nodeIntegration: false, contextIsolation: true, preload: path.join(__dirname, 'preload.js') },
+  });
+  const creationWindow = alarmCreationWindow;
+  creationWindow.loadFile(path.join(__dirname, 'index.html'), {
+    query: { alarmDialogOnly: '1', seconds: seconds === null ? '' : String(seconds) },
+  });
+  creationWindow.once('ready-to-show', () => { creationWindow.show(); creationWindow.focus(); });
+  creationWindow.on('closed', () => { if (alarmCreationWindow === creationWindow) alarmCreationWindow = null; });
+}
+
+function buildNewInMenu(): Electron.MenuItemConstructorOptions {
+  const shortcuts: Array<{ label: string; seconds: number | null }> = [
+    { label: 'Custom', seconds: null },
+    { label: '5 seconds', seconds: 5 },
+    { label: '10 seconds', seconds: 10 },
+    { label: '30 seconds', seconds: 30 },
+    { label: '1 minute', seconds: 60 },
+    { label: '2 minutes', seconds: 120 },
+    { label: '10 minutes', seconds: 600 },
+    { label: '30 minutes', seconds: 1800 },
+    { label: '1 hour', seconds: 3600 },
+    { label: '2 hours', seconds: 7200 },
+  ];
+  return {
+    label: 'New in',
+    submenu: shortcuts.map(item => ({
+      label: item.label,
+      click: () => openNewAlarmDialog(item.seconds),
+    })),
+  };
 }
 
 function updateTrayMenu(): void {
@@ -325,6 +372,8 @@ function setCountdownMenuButtonVisible(visible: boolean): void {
 function showCountdownWindowMenu(): void {
   if (!countdownWindow || countdownWindow.isDestroyed()) return;
   const menu = Menu.buildFromTemplate([
+    buildNewInMenu(),
+    { type: 'separator' },
     { label: 'Remaining time format', enabled: false },
     {
       label: 'Minutes (2m, 1m, < 1m)', type: 'radio', checked: countdownFormatPref === 'compact',
@@ -1021,6 +1070,9 @@ function initializeApp(): void {
     previewAlarm,
     closeAlarmPreview: () => {
       if (alarmPreviewWindow && !alarmPreviewWindow.isDestroyed()) alarmPreviewWindow.close();
+    },
+    closeAlarmCreationWindow: () => {
+      if (alarmCreationWindow && !alarmCreationWindow.isDestroyed()) alarmCreationWindow.close();
     },
     getEffectiveTimezone,
     getTimezonePref: () => timezonePref,

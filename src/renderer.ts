@@ -21,6 +21,7 @@ interface ElectronAPI {
   minimizeWindow: () => void;
   closeApp: () => void;
   openSettingsWindow: () => void;
+  closeAlarmCreationWindow: () => void;
   addAlarm: (alarm: Alarm) => Promise<{ ok: boolean; error?: string }>;
   updateAlarm: (alarm: Alarm) => Promise<{ ok: boolean; error?: string }>;
   deleteAlarm: (alarmId: string) => Promise<{ ok: boolean; error?: string }>;
@@ -54,6 +55,7 @@ let pendingNewAlarmDate: string | undefined;
 let pendingNewAlarmMessage = '';
 let ringingAlarmId: string | null = null;
 let optionsAlarmId: string | null = null;
+const isStandaloneAddWindow = new URLSearchParams(location.search).get('alarmDialogOnly') === '1';
 const alarmTime = (window as any).AlarmTime;
 
 function updateTimeTimezoneDisplay(): void {
@@ -279,6 +281,7 @@ async function saveAlarmOptions(): Promise<void> {
   }
   overlay.classList.remove('modal-overlay--visible', 'show');
   optionsAlarmId = null;
+  if (isStandaloneAddWindow) (window as any).electronAPI?.closeAlarmCreationWindow();
 }
 
 function getTimeUntilAlarm(alarm: Alarm): number {
@@ -572,12 +575,14 @@ document.addEventListener('DOMContentLoaded', () => {
     optionsOverlay?.classList.remove('modal-overlay--visible', 'show');
     optionsAlarmId = null;
     clearPendingNewAlarm();
+    if (isStandaloneAddWindow) electronAPI?.closeAlarmCreationWindow();
   });
   optionsOverlay?.addEventListener('click', event => {
     if (event.target === optionsOverlay) {
       optionsOverlay.classList.remove('modal-overlay--visible', 'show');
       optionsAlarmId = null;
       clearPendingNewAlarm();
+      if (isStandaloneAddWindow) electronAPI?.closeAlarmCreationWindow();
     }
   });
   if (electronAPI) {
@@ -596,6 +601,15 @@ document.addEventListener('DOMContentLoaded', () => {
       renderAlarms();
       if (timeTimezoneInterval) clearInterval(timeTimezoneInterval);
       timeTimezoneInterval = setInterval(updateTimeTimezoneDisplay, 60000);
+      if (isStandaloneAddWindow) {
+        clearPendingNewAlarm();
+        const seconds = Number(new URLSearchParams(location.search).get('seconds'));
+        if (Number.isFinite(seconds) && seconds > 0) {
+          pendingNewAlarmScheduledAt = Date.now() + seconds * 1000;
+          pendingNewAlarmDate = dateInTimezone(getEffectiveTimezoneForQuick(), pendingNewAlarmScheduledAt);
+        }
+        openAlarmOptions();
+      }
     });
 
     // Request the alarm list

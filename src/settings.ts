@@ -47,10 +47,10 @@ export interface SettingsPaths {
   overridePath?: string;
 }
 
-export const DEFAULT_SETTINGS: AppSettings = { alarms: [], countdownWindowVisible: false };
+export const DEFAULT_SETTINGS: AppSettings = { alarms: [], countdownWindowVisible: true };
 
 function defaultSettings(): AppSettings {
-  return { alarms: [], countdownWindowVisible: false };
+  return { alarms: [], countdownWindowVisible: true };
 }
 
 function clampTimeUnit(value: unknown, min: number, max: number): number {
@@ -165,7 +165,7 @@ export function parseSettings(raw: unknown): AppSettings {
     : undefined;
   return {
     alarms: parseAlarms(value.alarms),
-    countdownWindowVisible: value.countdownWindowVisible === true,
+    countdownWindowVisible: value.countdownWindowVisible !== false,
     ...(validCountdownPosition ? { countdownWindowPosition: validCountdownPosition } : {}),
     timezone: normalizeTimeZone(value.timezone) ?? undefined,
     ...(typeof value.confirmQuit === 'boolean' ? { confirmQuit: value.confirmQuit } : {}),

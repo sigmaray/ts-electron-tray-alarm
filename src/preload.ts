@@ -36,6 +36,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.send('close-app');
   },
   openSettingsWindow: () => ipcRenderer.send('settings-window-open'),
+  closeAlarmCreationWindow: () => ipcRenderer.send('alarm-creation-window-close'),
   getAppPreferences: () => ipcRenderer.invoke('get-app-preferences') as Promise<{
     confirmQuit: boolean;
     countdownFormat: 'compact' | 'clock' | 'seconds';
