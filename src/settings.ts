@@ -27,6 +27,7 @@ export interface AppSettings {
   timezone?: string | null;
   confirmQuit?: boolean;
   countdownFormat?: 'compact' | 'clock' | 'seconds';
+  countdownMenuButtonVisible?: boolean;
 }
 
 export interface CountdownWindowPosition {
@@ -169,6 +170,9 @@ export function parseSettings(raw: unknown): AppSettings {
     ...(typeof value.confirmQuit === 'boolean' ? { confirmQuit: value.confirmQuit } : {}),
     ...(value.countdownFormat === 'compact' || value.countdownFormat === 'clock' || value.countdownFormat === 'seconds'
       ? { countdownFormat: value.countdownFormat }
+      : {}),
+    ...(typeof value.countdownMenuButtonVisible === 'boolean'
+      ? { countdownMenuButtonVisible: value.countdownMenuButtonVisible }
       : {}),
   };
 }

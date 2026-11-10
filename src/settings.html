@@ -37,6 +37,10 @@
           <option value="clock">Time with seconds: 00:01:51</option>
           <option value="seconds">Total seconds: 111s</option>
         </select>
+        <div class="form-check mt-3">
+          <input id="countdownMenuButtonVisible" class="form-check-input" type="checkbox" checked>
+          <label class="form-check-label" for="countdownMenuButtonVisible">Show menu button in the countdown window</label>
+        </div>
       </div>
     </section>
 
@@ -52,6 +56,7 @@
     const timezoneCurrent = document.getElementById('settingsTimezoneCurrent');
     const confirmQuit = document.getElementById('confirmQuit');
     const countdownFormat = document.getElementById('countdownFormat');
+    const countdownMenuButtonVisible = document.getElementById('countdownMenuButtonVisible');
     const status = document.getElementById('settingsStatus');
 
     async function initializeSettings() {
@@ -65,6 +70,7 @@
         timezoneCurrent.textContent = `Currently using: ${timezone.effective}`;
         confirmQuit.checked = preferences.confirmQuit;
         countdownFormat.value = preferences.countdownFormat;
+        countdownMenuButtonVisible.checked = preferences.countdownMenuButtonVisible !== false;
       } catch (error) {
         status.textContent = `Could not load settings: ${error.message || error}`;
       }
@@ -79,6 +85,7 @@
         const result = await api.saveAppPreferences({
           confirmQuit: confirmQuit.checked,
           countdownFormat: countdownFormat.value,
+          countdownMenuButtonVisible: countdownMenuButtonVisible.checked,
         });
         if (!result.ok) throw new Error(result.error || 'Could not save settings.');
         status.textContent = 'Settings saved.';

@@ -25,15 +25,38 @@
       user-select: none;
       -webkit-app-region: drag;
     }
-    .countdown-widget__close {
+    .countdown-widget__menu {
       -webkit-app-region: no-drag;
+      width: 1.35rem;
+      height: 1.35rem;
+      padding: .1rem;
+    }
+    .countdown-widget__menu[hidden] {
+      display: none !important;
+    }
+    .countdown-widget__menu.btn,
+    .countdown-widget__menu.btn:hover,
+    .countdown-widget__menu.btn:focus {
+      color: #fff;
+      background-color: #5B7FA6FF;
+      border: 1px solid #fff;
+      box-shadow: none;
+    }
+    .countdown-widget__menu-line {
+      display: block;
+      width: .65rem;
+      height: 1px;
+      border-radius: 2px;
+      background: #fff;
     }
   </style>
 </head>
 <body>
   <div class="countdown-widget card text-bg-primary shadow-sm border-0 d-flex flex-row align-items-center gap-3 px-3 py-2 fs-5 fw-bold">
     <span id="countdown-display" class="countdown-widget__display font-monospace">—</span>
-    <button type="button" id="countdown-close" class="countdown-widget__close btn-close btn-close-white" title="Close" aria-label="Close"></button>
+    <button type="button" id="countdown-menu" class="countdown-widget__menu btn btn-light d-flex flex-column justify-content-center align-items-center gap-1" title="Countdown menu" aria-label="Open countdown menu">
+      <span class="countdown-widget__menu-line"></span><span class="countdown-widget__menu-line"></span><span class="countdown-widget__menu-line"></span>
+    </button>
   </div>
   <script>
     (function() {
@@ -45,9 +68,16 @@
       } else if (el) {
         el.textContent = '—';
       }
-      var closeBtn = document.getElementById('countdown-close');
-      if (closeBtn && window.electronAPI && typeof window.electronAPI.closeCountdownWindow === 'function') {
-        closeBtn.addEventListener('click', function() { window.electronAPI.closeCountdownWindow(); });
+      const menuButton = document.getElementById('countdown-menu');
+      if (menuButton && window.electronAPI && typeof window.electronAPI.onCountdownMenuButtonVisibility === 'function') {
+        window.electronAPI.onCountdownMenuButtonVisibility(function(visible) {
+          menuButton.hidden = !visible;
+          menuButton.style.setProperty('display', visible ? 'flex' : 'none', 'important');
+        });
+      }
+      var menuBtn = document.getElementById('countdown-menu');
+      if (menuBtn && window.electronAPI && typeof window.electronAPI.showCountdownWindowMenu === 'function') {
+        menuBtn.addEventListener('click', function() { window.electronAPI.showCountdownWindowMenu(); });
       }
     })();
   </script>

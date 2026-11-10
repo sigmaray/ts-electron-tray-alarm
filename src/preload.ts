@@ -36,8 +36,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.send('close-app');
   },
   openSettingsWindow: () => ipcRenderer.send('settings-window-open'),
-  getAppPreferences: () => ipcRenderer.invoke('get-app-preferences') as Promise<{ confirmQuit: boolean; countdownFormat: 'compact' | 'clock' | 'seconds' }>,
-  saveAppPreferences: (preferences: { confirmQuit: boolean; countdownFormat: 'compact' | 'clock' | 'seconds' }) =>
+  getAppPreferences: () => ipcRenderer.invoke('get-app-preferences') as Promise<{
+    confirmQuit: boolean;
+    countdownFormat: 'compact' | 'clock' | 'seconds';
+    countdownMenuButtonVisible: boolean;
+  }>,
+  saveAppPreferences: (preferences: {
+    confirmQuit: boolean;
+    countdownFormat: 'compact' | 'clock' | 'seconds';
+    countdownMenuButtonVisible: boolean;
+  }) =>
     ipcRenderer.invoke('save-app-preferences', preferences) as Promise<{ ok: boolean; error?: string }>,
   // Alarm commands
   addAlarm: (alarm: Alarm) => ipcRenderer.invoke('alarm-add', alarm) as Promise<AlarmOperationResult>,
@@ -75,11 +83,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
   closeCountdownWindow: () => {
     ipcRenderer.send('countdown-window-close');
   },
+  showCountdownWindowMenu: () => ipcRenderer.send('countdown-window-menu'),
   onCountdownWindowState: (callback: (visible: boolean) => void) => {
     ipcRenderer.on('countdown-window-state', (_event, visible: boolean) => callback(visible));
   },
   onCountdownUpdate: (callback: (text: string) => void) => {
     ipcRenderer.on('countdown-update', (_event, text: string) => callback(text));
+  },
+  onCountdownMenuButtonVisibility: (callback: (visible: boolean) => void) => {
+    ipcRenderer.on('countdown-menu-button-visibility', (_event, visible: boolean) => callback(visible));
   },
   // Time zone
   getTimezones: () => ipcRenderer.invoke('get-timezones') as Promise<string[]>,

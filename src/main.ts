@@ -60,11 +60,13 @@ let countdownPositionSaveTimer: NodeJS.Timeout | null = null;
 let timezonePref: string | null = null; // null means use the system time zone
 let confirmQuitPref = true;
 let countdownFormatPref: 'compact' | 'clock' | 'seconds' = 'compact';
+let countdownMenuButtonVisiblePref = true;
 
 function saveSettings(): void {
   settingsStore?.save({
     alarms, countdownWindowVisible: countdownWindowVisiblePref, countdownWindowPosition,
     timezone: timezonePref, confirmQuit: confirmQuitPref, countdownFormat: countdownFormatPref,
+    countdownMenuButtonVisible: countdownMenuButtonVisiblePref,
   });
 }
 
@@ -303,6 +305,55 @@ function updateCountdownWindow(): void {
   }
 }
 
+function setCountdownFormat(format: 'compact' | 'clock' | 'seconds'): void {
+  countdownFormatPref = format;
+  saveSettings();
+  updateCountdownWindow();
+}
+
+function setCountdownMenuButtonVisible(visible: boolean): void {
+  countdownMenuButtonVisiblePref = visible;
+  saveSettings();
+  if (countdownWindow && !countdownWindow.isDestroyed()) {
+    countdownWindow.webContents.send('countdown-menu-button-visibility', visible);
+  }
+}
+
+function showCountdownWindowMenu(): void {
+  if (!countdownWindow || countdownWindow.isDestroyed()) return;
+  const menu = Menu.buildFromTemplate([
+    { label: 'Remaining time format', enabled: false },
+    {
+      label: 'Minutes (2m, 1m, < 1m)', type: 'radio', checked: countdownFormatPref === 'compact',
+      click: () => setCountdownFormat('compact'),
+    },
+    {
+      label: 'Time with seconds (00:01:51)', type: 'radio', checked: countdownFormatPref === 'clock',
+      click: () => setCountdownFormat('clock'),
+    },
+    {
+      label: 'Total seconds (111s)', type: 'radio', checked: countdownFormatPref === 'seconds',
+      click: () => setCountdownFormat('seconds'),
+    },
+    { type: 'separator' },
+    {
+      label: 'Show menu button', type: 'checkbox', checked: countdownMenuButtonVisiblePref,
+      click: menuItem => setCountdownMenuButtonVisible(menuItem.checked),
+    },
+    { type: 'separator' },
+    {
+      label: 'Show main window',
+      click: () => {
+        mainWindow?.show();
+        mainWindow?.focus();
+        updateTrayMenu();
+      },
+    },
+    { label: 'Hide countdown window', click: destroyCountdownWindow },
+  ]);
+  menu.popup({ window: countdownWindow });
+}
+
 const COUNTDOWN_WINDOW_WIDTH = 280;
 const COUNTDOWN_WINDOW_HEIGHT = 70;
 
@@ -450,6 +501,7 @@ function createCountdownWindow(): void {
       }, 150);
       console.info(`[countdown] Window shown at ${JSON.stringify(countdownWindow.getBounds())}`);
       countdownWindowVisiblePref = true;
+      countdownWindow.webContents.send('countdown-menu-button-visibility', countdownMenuButtonVisiblePref);
       saveSettings();
       sendCountdownWindowState();
     }
@@ -839,6 +891,7 @@ function initializeApp(): void {
   timezonePref = settings.timezone ?? null;
   confirmQuitPref = settings.confirmQuit ?? true;
   countdownFormatPref = settings.countdownFormat ?? 'compact';
+  countdownMenuButtonVisiblePref = settings.countdownMenuButtonVisible ?? true;
   const now = Date.now();
   alarms = settings.alarms.map(alarm => scheduleAlarm(alarm, getEffectiveTimezone(), now));
   if (alarms.some((alarm, index) => alarm.scheduledAt !== settings.alarms[index].scheduledAt)) saveSettings();
@@ -879,24 +932,34 @@ function initializeApp(): void {
     },
     toggleCountdownWindow,
     destroyCountdownWindow,
+    showCountdownWindowMenu,
     stopBlinking,
     notifyAlarmDismissed: () => {
       if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('alarm-dismiss-from-main');
     },
     openSettingsWindow,
     requestQuit: () => { void requestQuit(); },
-    getAppPreferences: () => ({ confirmQuit: confirmQuitPref, countdownFormat: countdownFormatPref }),
+    getAppPreferences: () => ({
+      confirmQuit: confirmQuitPref,
+      countdownFormat: countdownFormatPref,
+      countdownMenuButtonVisible: countdownMenuButtonVisiblePref,
+    }),
     saveAppPreferences: value => {
       if (!value || typeof value !== 'object' || Array.isArray(value)) return { ok: false, error: 'Invalid settings.' };
       const candidate = value as Record<string, unknown>;
       if (typeof candidate.confirmQuit !== 'boolean'
-        || (candidate.countdownFormat !== 'compact' && candidate.countdownFormat !== 'clock' && candidate.countdownFormat !== 'seconds')) {
+        || (candidate.countdownFormat !== 'compact' && candidate.countdownFormat !== 'clock' && candidate.countdownFormat !== 'seconds')
+        || typeof candidate.countdownMenuButtonVisible !== 'boolean') {
         return { ok: false, error: 'Invalid settings.' };
       }
       confirmQuitPref = candidate.confirmQuit;
       countdownFormatPref = candidate.countdownFormat;
+      countdownMenuButtonVisiblePref = candidate.countdownMenuButtonVisible;
       saveSettings();
       updateCountdownWindow();
+      if (countdownWindow && !countdownWindow.isDestroyed()) {
+        countdownWindow.webContents.send('countdown-menu-button-visibility', countdownMenuButtonVisiblePref);
+      }
       return { ok: true };
     },
     notifyTimezoneUpdated: () => {

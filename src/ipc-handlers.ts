@@ -12,12 +12,13 @@ export interface IpcDependencies {
   trayClick(): void;
   toggleCountdownWindow(): void;
   destroyCountdownWindow(): void;
+  showCountdownWindowMenu(): void;
   stopBlinking(): void;
   postponeAlarm(alarmId: string, minutes: number): { ok: boolean; error?: string };
   notifyAlarmDismissed(): void;
   openSettingsWindow(): void;
   requestQuit(): void;
-  getAppPreferences(): { confirmQuit: boolean; countdownFormat: 'compact' | 'clock' | 'seconds' };
+  getAppPreferences(): { confirmQuit: boolean; countdownFormat: 'compact' | 'clock' | 'seconds'; countdownMenuButtonVisible: boolean };
   saveAppPreferences(value: unknown): { ok: boolean; error?: string };
   notifyTimezoneUpdated(): void;
   getEffectiveTimezone(): string;
@@ -83,6 +84,7 @@ export function registerIpcHandlers(deps: IpcDependencies, handlers: IpcMain = i
   handlers.handle('alarm-postpone', (_event, alarmId: string, minutes: number) => deps.postponeAlarm(alarmId, minutes));
   handlers.on('countdown-window-toggle', () => deps.toggleCountdownWindow());
   handlers.on('countdown-window-close', () => deps.destroyCountdownWindow());
+  handlers.on('countdown-window-menu', () => deps.showCountdownWindowMenu());
   handlers.handle('get-timezones', (): string[] => {
     const intl = Intl as typeof Intl & { supportedValuesOf?(key: string): string[] };
     return typeof intl.supportedValuesOf === 'function' ? intl.supportedValuesOf('timeZone') : [
