@@ -49,7 +49,7 @@ let isAlarmTriggered = false;
 let soundTestInterval: ReturnType<typeof setInterval> | null = null;
 let timeUpdateInterval: NodeJS.Timeout | null = null;
 let currentTimezoneInfo: { effective: string; isSystem: boolean } | null = null;
-let timeTimezoneInterval: ReturnType<typeof setInterval> | null = null;
+let timeTimezoneInterval: ReturnType<typeof setTimeout> | null = null;
 let pendingNewAlarmScheduledAt: number | undefined;
 let pendingNewAlarmDate: string | undefined;
 let pendingNewAlarmMessage = '';
@@ -626,8 +626,12 @@ document.addEventListener('DOMContentLoaded', () => {
       currentTimezoneInfo = info;
       updateTimeTimezoneDisplay();
       renderAlarms();
-      if (timeTimezoneInterval) clearInterval(timeTimezoneInterval);
-      timeTimezoneInterval = setInterval(updateTimeTimezoneDisplay, 60000);
+      if (timeTimezoneInterval) clearTimeout(timeTimezoneInterval);
+      const msUntilNextMinute = 60000 - (Date.now() % 60000);
+      timeTimezoneInterval = setTimeout(() => {
+        updateTimeTimezoneDisplay();
+        timeTimezoneInterval = setInterval(updateTimeTimezoneDisplay, 60000);
+      }, msUntilNextMinute);
       if (isStandaloneAddWindow) {
         clearPendingNewAlarm();
         const seconds = Number(new URLSearchParams(location.search).get('seconds'));
