@@ -527,6 +527,10 @@ document.addEventListener('DOMContentLoaded', () => {
       (document.getElementById('alarmOptionsMinute') as HTMLInputElement).value = String(time.minute).padStart(2, '0');
       (document.getElementById('alarmOptionsSecond') as HTMLInputElement).value = String(time.second).padStart(2, '0');
       (document.getElementById('alarmOptionsDate') as HTMLInputElement).value = dateInTimezone(getEffectiveTimezoneForQuick(), target);
+      const dateField = document.getElementById('alarmOptionsDateField');
+      const setDateButton = document.getElementById('setAlarmDateBtn') as HTMLButtonElement | null;
+      if (dateField) dateField.hidden = false;
+      if (setDateButton) setDateButton.hidden = true;
     });
   });
   document.getElementById('alarmOptionsCancelBtn')?.addEventListener('click', () => {

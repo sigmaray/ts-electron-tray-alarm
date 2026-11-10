@@ -57,6 +57,7 @@
         <section class="quick-reminders card shadow mb-4">
             <div class="card-header bg-primary text-white"><h2 class="h5 mb-0">Quick reminder</h2></div>
             <div class="card-body d-flex flex-wrap justify-content-center gap-2">
+                <button class="btn btn-outline-primary" data-reminder-seconds="5">in 5 seconds</button>
                 <button class="btn btn-outline-primary" data-reminder-seconds="10">in 10 seconds</button>
                 <button class="btn btn-outline-primary" data-reminder-seconds="30">in 30 seconds</button>
                 <button class="btn btn-outline-primary" data-reminder-seconds="60">in 1 minute</button>
@@ -103,6 +104,8 @@
                     <span id="alarmOptionsSecondGroup" class="input-group-text p-0 border-0 bg-transparent"><input type="number" id="alarmOptionsSecond" class="alarm-options__time-input form-control" min="0" max="59" aria-label="Second"></span>
                 </div>
                 <div class="quick-time d-flex flex-wrap justify-content-center gap-2 mb-3">
+                    <a href="#" class="quick-time__link btn btn-sm btn-outline-secondary" data-options-seconds="5">in 5 seconds</a>
+                    <a href="#" class="quick-time__link btn btn-sm btn-outline-secondary" data-options-seconds="10">in 10 seconds</a>
                     <a href="#" class="quick-time__link btn btn-sm btn-outline-secondary" data-options-seconds="30">in 30 seconds</a>
                     <a href="#" class="quick-time__link btn btn-sm btn-outline-secondary" data-options-seconds="60">in 1 minute</a>
                     <a href="#" class="quick-time__link btn btn-sm btn-outline-secondary" data-options-minutes="2">in 2 minutes</a>
