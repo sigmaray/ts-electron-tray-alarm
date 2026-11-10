@@ -18,7 +18,7 @@ export interface IpcDependencies {
   notifyAlarmDismissed(): void;
   openSettingsWindow(): void;
   requestQuit(): void;
-  getAppPreferences(): { confirmQuit: boolean; countdownFormat: 'compact' | 'clock' | 'seconds'; countdownMenuButtonVisible: boolean };
+  getAppPreferences(): { confirmQuit: boolean; countdownFormat: 'compact' | 'clock' | 'seconds'; countdownMenuButtonVisible: boolean; countdownFontSize: number };
   saveAppPreferences(value: unknown): { ok: boolean; error?: string };
   notifyTimezoneUpdated(): void;
   getEffectiveTimezone(): string;

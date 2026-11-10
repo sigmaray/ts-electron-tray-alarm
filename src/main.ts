@@ -61,12 +61,14 @@ let timezonePref: string | null = null; // null means use the system time zone
 let confirmQuitPref = true;
 let countdownFormatPref: 'compact' | 'clock' | 'seconds' = 'compact';
 let countdownMenuButtonVisiblePref = true;
+let countdownFontSizePref = 15;
 
 function saveSettings(): void {
   settingsStore?.save({
     alarms, countdownWindowVisible: countdownWindowVisiblePref, countdownWindowPosition,
     timezone: timezonePref, confirmQuit: confirmQuitPref, countdownFormat: countdownFormatPref,
     countdownMenuButtonVisible: countdownMenuButtonVisiblePref,
+    countdownFontSize: countdownFontSizePref,
   });
 }
 
@@ -502,6 +504,7 @@ function createCountdownWindow(): void {
       console.info(`[countdown] Window shown at ${JSON.stringify(countdownWindow.getBounds())}`);
       countdownWindowVisiblePref = true;
       countdownWindow.webContents.send('countdown-menu-button-visibility', countdownMenuButtonVisiblePref);
+      countdownWindow.webContents.send('countdown-font-size', countdownFontSizePref);
       saveSettings();
       sendCountdownWindowState();
     }
@@ -892,6 +895,7 @@ function initializeApp(): void {
   confirmQuitPref = settings.confirmQuit ?? true;
   countdownFormatPref = settings.countdownFormat ?? 'compact';
   countdownMenuButtonVisiblePref = settings.countdownMenuButtonVisible ?? true;
+  countdownFontSizePref = settings.countdownFontSize ?? 15;
   const now = Date.now();
   alarms = settings.alarms.map(alarm => scheduleAlarm(alarm, getEffectiveTimezone(), now));
   if (alarms.some((alarm, index) => alarm.scheduledAt !== settings.alarms[index].scheduledAt)) saveSettings();
@@ -943,22 +947,26 @@ function initializeApp(): void {
       confirmQuit: confirmQuitPref,
       countdownFormat: countdownFormatPref,
       countdownMenuButtonVisible: countdownMenuButtonVisiblePref,
+      countdownFontSize: countdownFontSizePref,
     }),
     saveAppPreferences: value => {
       if (!value || typeof value !== 'object' || Array.isArray(value)) return { ok: false, error: 'Invalid settings.' };
       const candidate = value as Record<string, unknown>;
       if (typeof candidate.confirmQuit !== 'boolean'
         || (candidate.countdownFormat !== 'compact' && candidate.countdownFormat !== 'clock' && candidate.countdownFormat !== 'seconds')
-        || typeof candidate.countdownMenuButtonVisible !== 'boolean') {
+        || typeof candidate.countdownMenuButtonVisible !== 'boolean'
+        || !Number.isInteger(candidate.countdownFontSize) || Number(candidate.countdownFontSize) < 8 || Number(candidate.countdownFontSize) > 32) {
         return { ok: false, error: 'Invalid settings.' };
       }
       confirmQuitPref = candidate.confirmQuit;
       countdownFormatPref = candidate.countdownFormat;
       countdownMenuButtonVisiblePref = candidate.countdownMenuButtonVisible;
+      countdownFontSizePref = Number(candidate.countdownFontSize);
       saveSettings();
       updateCountdownWindow();
       if (countdownWindow && !countdownWindow.isDestroyed()) {
         countdownWindow.webContents.send('countdown-menu-button-visibility', countdownMenuButtonVisiblePref);
+        countdownWindow.webContents.send('countdown-font-size', countdownFontSizePref);
       }
       return { ok: true };
     },

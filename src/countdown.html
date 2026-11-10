@@ -22,14 +22,26 @@
     }
     .countdown-widget {
       background-color: #5B7FA6FF !important;
+      font-size: var(--countdown-font-size, 15pt);
+      padding: .35em .5em;
+      gap: .75em;
       user-select: none;
       -webkit-app-region: drag;
     }
+    .countdown-widget__display {
+      line-height: 1.2;
+      align-self: center;
+    }
     .countdown-widget__menu {
       -webkit-app-region: no-drag;
-      width: 1.35rem;
-      height: 1.35rem;
-      padding: .1rem;
+      width: 1.2em;
+      height: 1.2em;
+      padding: .08em;
+      gap: .12em !important;
+      font-size: inherit !important;
+      line-height: 1.2;
+      flex: 0 0 1.2em;
+      align-self: center;
     }
     .countdown-widget__menu[hidden] {
       display: none !important;
@@ -44,15 +56,15 @@
     }
     .countdown-widget__menu-line {
       display: block;
-      width: .65rem;
-      height: 1px;
+      width: .55em;
+      height: max(1px, .06em);
       border-radius: 2px;
       background: #fff;
     }
   </style>
 </head>
 <body>
-  <div class="countdown-widget card text-bg-primary shadow-sm border-0 d-flex flex-row align-items-center gap-3 px-3 py-2 fs-5 fw-bold">
+  <div class="countdown-widget card text-bg-primary shadow-sm border-0 d-flex flex-row align-items-center fw-bold">
     <span id="countdown-display" class="countdown-widget__display font-monospace">—</span>
     <button type="button" id="countdown-menu" class="countdown-widget__menu btn btn-light d-flex flex-column justify-content-center align-items-center gap-1" title="Countdown menu" aria-label="Open countdown menu">
       <span class="countdown-widget__menu-line"></span><span class="countdown-widget__menu-line"></span><span class="countdown-widget__menu-line"></span>
@@ -73,6 +85,13 @@
         window.electronAPI.onCountdownMenuButtonVisibility(function(visible) {
           menuButton.hidden = !visible;
           menuButton.style.setProperty('display', visible ? 'flex' : 'none', 'important');
+        });
+      }
+      const widget = document.querySelector('.countdown-widget');
+      if (widget && window.electronAPI && typeof window.electronAPI.onCountdownFontSize === 'function') {
+        window.electronAPI.onCountdownFontSize(function(size) {
+          const points = Number.isInteger(size) && size >= 8 && size <= 32 ? size : 15;
+          widget.style.setProperty('--countdown-font-size', points + 'pt');
         });
       }
       var menuBtn = document.getElementById('countdown-menu');

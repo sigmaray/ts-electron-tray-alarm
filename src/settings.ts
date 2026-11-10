@@ -28,6 +28,7 @@ export interface AppSettings {
   confirmQuit?: boolean;
   countdownFormat?: 'compact' | 'clock' | 'seconds';
   countdownMenuButtonVisible?: boolean;
+  countdownFontSize?: number;
 }
 
 export interface CountdownWindowPosition {
@@ -174,6 +175,15 @@ export function parseSettings(raw: unknown): AppSettings {
     ...(typeof value.countdownMenuButtonVisible === 'boolean'
       ? { countdownMenuButtonVisible: value.countdownMenuButtonVisible }
       : {}),
+    ...(Number.isInteger(value.countdownFontSize) && Number(value.countdownFontSize) >= 8 && Number(value.countdownFontSize) <= 32
+      ? { countdownFontSize: Number(value.countdownFontSize) }
+      : value.countdownFontSize === 'small'
+        ? { countdownFontSize: 12 }
+        : value.countdownFontSize === 'large'
+          ? { countdownFontSize: 20 }
+          : value.countdownFontSize === 'medium'
+            ? { countdownFontSize: 15 }
+            : {}),
   };
 }
 

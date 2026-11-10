@@ -40,11 +40,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
     confirmQuit: boolean;
     countdownFormat: 'compact' | 'clock' | 'seconds';
     countdownMenuButtonVisible: boolean;
+    countdownFontSize: number;
   }>,
   saveAppPreferences: (preferences: {
     confirmQuit: boolean;
     countdownFormat: 'compact' | 'clock' | 'seconds';
     countdownMenuButtonVisible: boolean;
+    countdownFontSize: number;
   }) =>
     ipcRenderer.invoke('save-app-preferences', preferences) as Promise<{ ok: boolean; error?: string }>,
   // Alarm commands
@@ -92,6 +94,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   onCountdownMenuButtonVisibility: (callback: (visible: boolean) => void) => {
     ipcRenderer.on('countdown-menu-button-visibility', (_event, visible: boolean) => callback(visible));
+  },
+  onCountdownFontSize: (callback: (size: number) => void) => {
+    ipcRenderer.on('countdown-font-size', (_event, size) => callback(size));
   },
   // Time zone
   getTimezones: () => ipcRenderer.invoke('get-timezones') as Promise<string[]>,
