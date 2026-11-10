@@ -330,6 +330,12 @@ function hasAlarmAtTime(
   });
 }
 
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/g, character => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  })[character]!);
+}
+
 function renderAlarms(): void {
   const container = document.getElementById('alarmsList');
   if (!container) return;
@@ -357,6 +363,13 @@ function renderAlarms(): void {
     const dateStr = `${baseDateStr} ${weekday} (${relativeDate})`;
     const frequency = alarm.frequency ?? (alarm.recurring ? 'daily' : 'once');
     const frequencyLabel = frequency === 'hourly' ? `Every hour at minute ${String(alarm.minute).padStart(2, '0')}` : frequency === 'daily' ? 'Every day' : 'Once';
+    const notificationText = alarm.message?.trim();
+    const notificationTextPreview = notificationText
+      ? `${Array.from(notificationText).slice(0, 120).join('')}${Array.from(notificationText).length > 120 ? '…' : ''}`
+      : '';
+    const safeNotificationText = notificationText ? escapeHtml(notificationText) : '';
+    const safeNotificationPreview = notificationTextPreview ? escapeHtml(notificationTextPreview) : '';
+    const soundEnabled = alarm.sound !== 'none';
     
 const timeUntil = alarm.enabled ? getTimeUntilAlarm(alarm) : 0;
 const timeUntilStr = alarm.enabled ? formatTimeUntil(timeUntil) : '';
@@ -365,16 +378,18 @@ return `
   <div class="alarm-item list-group-item d-flex flex-wrap justify-content-between align-items-center gap-3" data-id="${alarm.id}">
     <div class="alarm-item__info d-flex flex-wrap align-items-center gap-3">
       <div class="alarm-item__time d-flex flex-column">
-        <span class="alarm-item__time-value fs-3 fw-bold font-monospace">${frequency === 'once' && alarm.completed ? `<del>${timeStr}</del>` : timeStr}</span>
+        <div class="alarm-item__time-header d-flex align-items-center justify-content-between gap-3">
+          <span class="alarm-item__time-value fs-3 fw-bold font-monospace">${frequency === 'once' && alarm.completed ? `<del>${timeStr}</del>` : timeStr}</span>
+          <div class="alarm-item__toggle form-check form-switch mb-0">
+            <input type="checkbox" class="form-check-input" id="enable-${alarm.id}" ${alarm.enabled ? 'checked' : ''} onchange="toggleAlarm('${alarm.id}', this.checked)">
+            <label class="form-check-label" for="enable-${alarm.id}">${alarm.enabled ? 'On' : 'Off'}</label>
+          </div>
+        </div>
+        ${notificationText ? `<span class="alarm-item__message badge text-bg-light border fs-6 fw-normal text-wrap text-start" title="${safeNotificationText}">${safeNotificationPreview}</span>` : ''}
         <span class="alarm-item__frequency small text-body-secondary">${frequencyLabel}</span>
+        <span class="alarm-item__sound small" role="img" aria-label="${soundEnabled ? 'Sound enabled' : 'Muted'}" title="${soundEnabled ? 'Sound enabled' : 'Muted'}"><i class="fa-solid ${soundEnabled ? 'fa-volume' : 'fa-volume-xmark'}" aria-hidden="true"></i></span>
         <span class="alarm-item__date badge ${alarm.completed ? 'text-bg-success' : 'text-bg-secondary'} align-self-start">${dateStr}${alarm.completed ? ' · Done' : ''}</span>
         ${alarm.enabled && timeUntilStr ? `<span class="alarm-item__countdown small text-body-secondary">${timeUntilStr}</span>` : ''}
-      </div>
-      <div class="alarm-item__toggles d-flex flex-wrap gap-3">
-        <div class="alarm-item__toggle form-check form-switch">
-            <input type="checkbox" class="form-check-input" id="enable-${alarm.id}" ${alarm.enabled ? 'checked' : ''} onchange="toggleAlarm('${alarm.id}', this.checked)">
-            <label class="form-check-label" for="enable-${alarm.id}">On</label>
-        </div>
       </div>
     </div>
     <div class="alarm-actions d-flex gap-2">
