@@ -52,6 +52,8 @@ jobs:
           libgif-dev \
           librsvg2-dev \
           xvfb \
+          gcc \
+          libxtst-dev \
           libnss3 \
           libatk1.0-0 \
           libatk-bridge2.0-0 \
@@ -74,19 +76,11 @@ jobs:
     - name: Install Playwright browsers
       run: npx playwright install --with-deps chromium
 
-    - name: Start virtual display
-      run: |
-        export DISPLAY=:99
-        Xvfb :99 -screen 0 1024x768x24 > /dev/null 2>&1 &
-        sleep 3
-      env:
-        DISPLAY: :99
-
     - name: Run E2E tests
-      run: npm run test:e2e
+      run: xvfb-run -a -s "-screen 0 1024x768x24" npm run test:e2e
       env:
         ELECTRON_DISABLE_SANDBOX: 1
-        DISPLAY: :99
+        E2E_NATIVE_TRAY: ci
 
     - name: Upload test results
       if: always()
