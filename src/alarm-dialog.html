@@ -11,6 +11,7 @@
   <main class="container py-4 text-center">
     <h1 class="h3 text-danger">⏰ Alarm</h1>
     <p id="alarmMessage" class="fs-5"></p>
+    <p id="previewLabel" class="text-body-secondary" hidden>Alarm preview</p>
     <div class="alarm-dialog__actions d-flex justify-content-center align-items-center gap-2 mt-4">
       <select id="postponeSelect" class="form-select w-auto" aria-label="Postpone duration">
         <option value="1">1 minute</option><option value="2">2 minutes</option><option value="5">5 minutes</option>
@@ -23,15 +24,29 @@
   <script>
     const params = new URLSearchParams(location.search);
     const alarmId = params.get('alarmId') || '';
+    const isPreview = params.get('preview') === 'true';
+    if (isPreview) {
+      document.title = 'Alarm preview';
+      document.querySelector('h1').textContent = '⏰ Alarm preview';
+      document.getElementById('previewLabel').hidden = false;
+    }
     document.getElementById('alarmMessage').textContent = params.get('message') || 'Time to wake up.';
     document.getElementById('postponeSelect').value = params.get('postpone') || '5';
     document.getElementById('postponeButton').addEventListener('click', async event => {
       event.stopPropagation();
+      if (isPreview) {
+        window.electronAPI.closeAlarmPreview();
+        return;
+      }
       const result = await window.electronAPI.postponeAlarm(alarmId, Number(document.getElementById('postponeSelect').value));
       if (!result.ok) document.getElementById('alarmMessage').textContent = result.error || 'Could not postpone the alarm.';
     });
     document.getElementById('dismissButton').addEventListener('click', event => {
       event.stopPropagation();
+      if (isPreview) {
+        window.electronAPI.closeAlarmPreview();
+        return;
+      }
       window.electronAPI.dismissAlarm();
     });
   </script>

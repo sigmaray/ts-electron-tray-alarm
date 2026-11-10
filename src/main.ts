@@ -19,6 +19,7 @@ let mainWindow: BrowserWindow | null = null;
 let settingsWindow: BrowserWindow | null = null;
 let countdownWindow: BrowserWindow | null = null;
 let alarmDialogWindow: BrowserWindow | null = null;
+let alarmPreviewWindow: BrowserWindow | null = null;
 let activeAlarmId: string | null = null;
 let tray: Tray | null = null;
 
@@ -662,6 +663,31 @@ function triggerAlarm(alarm: Alarm): void {
   }
 }
 
+function previewAlarm(options: { notificationMode: 'window' | 'system' | 'both'; message?: string; sound: 'classic' | 'digital' | 'gentle' | 'none'; hour: number; minute: number; second: number }): void {
+  const body = options.message?.trim() || `Time: ${String(options.hour).padStart(2, '0')}:${String(options.minute).padStart(2, '0')}:${String(options.second).padStart(2, '0')}`;
+  if (options.notificationMode === 'window' || options.notificationMode === 'both') {
+    if (alarmPreviewWindow && !alarmPreviewWindow.isDestroyed()) alarmPreviewWindow.close();
+    const display = screen.getPrimaryDisplay();
+    const width = 430;
+    const height = 220;
+    alarmPreviewWindow = new BrowserWindow({
+      width, height,
+      x: display.workArea.x + Math.round((display.workArea.width - width) / 2),
+      y: display.workArea.y + Math.round((display.workArea.height - height) / 2),
+      alwaysOnTop: true, resizable: false, show: false, title: 'Alarm preview',
+      webPreferences: { nodeIntegration: false, contextIsolation: true, preload: path.join(__dirname, 'preload.js') },
+    });
+    const previewWindow = alarmPreviewWindow;
+    previewWindow.loadFile(path.join(__dirname, 'alarm-dialog.html'), { query: { message: body, preview: 'true' } });
+    previewWindow.once('ready-to-show', () => previewWindow.show());
+    previewWindow.on('closed', () => { if (alarmPreviewWindow === previewWindow) alarmPreviewWindow = null; });
+    setTimeout(() => { if (!previewWindow.isDestroyed()) previewWindow.close(); }, 7000);
+  }
+  if ((options.notificationMode === 'system' || options.notificationMode === 'both') && Notification.isSupported()) {
+    new Notification({ title: '⏰ Alarm preview', body, urgency: 'critical' }).show();
+  }
+}
+
 function startAlarmChecker(): void {
   if (alarmCheckInterval) return;
   
@@ -991,6 +1017,10 @@ function initializeApp(): void {
       sendAlarmsToRenderer();
       updateTrayIcon();
       return { ok: true };
+    },
+    previewAlarm,
+    closeAlarmPreview: () => {
+      if (alarmPreviewWindow && !alarmPreviewWindow.isDestroyed()) alarmPreviewWindow.close();
     },
     getEffectiveTimezone,
     getTimezonePref: () => timezonePref,

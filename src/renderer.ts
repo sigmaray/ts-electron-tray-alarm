@@ -24,6 +24,7 @@ interface ElectronAPI {
   addAlarm: (alarm: Alarm) => Promise<{ ok: boolean; error?: string }>;
   updateAlarm: (alarm: Alarm) => Promise<{ ok: boolean; error?: string }>;
   deleteAlarm: (alarmId: string) => Promise<{ ok: boolean; error?: string }>;
+  previewAlarm: (options: { notificationMode: 'system' | 'window' | 'both'; message?: string; sound: 'classic' | 'digital' | 'gentle' | 'none'; hour: number; minute: number; second: number }) => Promise<{ ok: boolean; error?: string }>;
   getAllAlarms: () => void;
   dismissAlarm: () => void;
   onAlarmsUpdated: (callback: (alarms: Alarm[]) => void) => void;
@@ -634,6 +635,39 @@ document.addEventListener('DOMContentLoaded', () => {
       playAlarmSound((document.getElementById('alarmOptionsSound') as HTMLSelectElement).value);
       button.textContent = 'Stop';
       soundTestInterval = setTimeout(() => { soundTestInterval = null; stopAlarmSound(); button.textContent = 'Test'; }, 2500) as any;
+    }
+  });
+
+  document.getElementById('previewAlarmBtn')?.addEventListener('click', async () => {
+    const button = document.getElementById('previewAlarmBtn') as HTMLButtonElement;
+    const hour = Number((document.getElementById('alarmOptionsHour') as HTMLInputElement).value);
+    const minute = Number((document.getElementById('alarmOptionsMinute') as HTMLInputElement).value);
+    const second = Number((document.getElementById('alarmOptionsSecond') as HTMLInputElement).value);
+    const notificationMode = document.querySelector<HTMLInputElement>('input[name="notificationMode"]:checked')?.value as 'window' | 'system' | 'both' | undefined;
+    const soundAllowed = document.querySelector<HTMLInputElement>('input[name="alarmSoundEnabled"]:checked')?.value !== 'no';
+    const sound: 'classic' | 'digital' | 'gentle' | 'none' = soundAllowed
+      ? (document.getElementById('alarmOptionsSound') as HTMLSelectElement).value as 'classic' | 'digital' | 'gentle'
+      : 'none';
+    const message = (document.getElementById('alarmOptionsMessage') as HTMLTextAreaElement).value.trim() || undefined;
+    if (!notificationMode || !Number.isInteger(hour) || !Number.isInteger(minute) || !Number.isInteger(second)) {
+      alert('Set a valid alarm time before previewing.');
+      return;
+    }
+    button.disabled = true;
+    try {
+      const api = (window as any).electronAPI as ElectronAPI;
+      const result = await api.previewAlarm({ notificationMode, message, sound, hour, minute, second });
+      if (!result.ok) throw new Error(result.error || 'Could not preview the alarm.');
+      if (sound !== 'none') {
+        if (soundTestInterval) clearTimeout(soundTestInterval);
+        stopAlarmSound();
+        playAlarmSound(sound);
+        soundTestInterval = setTimeout(() => { soundTestInterval = null; stopAlarmSound(); }, 2500) as any;
+      }
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Could not preview the alarm.');
+    } finally {
+      button.disabled = false;
     }
   });
 

@@ -15,6 +15,8 @@ export interface IpcDependencies {
   showCountdownWindowMenu(): void;
   stopBlinking(): void;
   postponeAlarm(alarmId: string, minutes: number): { ok: boolean; error?: string };
+  previewAlarm(options: { notificationMode: 'system' | 'window' | 'both'; message?: string; sound: 'classic' | 'digital' | 'gentle' | 'none'; hour: number; minute: number; second: number }): void;
+  closeAlarmPreview(): void;
   notifyAlarmDismissed(): void;
   openSettingsWindow(): void;
   requestQuit(): void;
@@ -82,6 +84,21 @@ export function registerIpcHandlers(deps: IpcDependencies, handlers: IpcMain = i
   handlers.handle('save-app-preferences', (_event, value: unknown) => deps.saveAppPreferences(value));
   handlers.on('alarm-dismiss', () => { deps.stopBlinking(); deps.notifyAlarmDismissed(); });
   handlers.handle('alarm-postpone', (_event, alarmId: string, minutes: number) => deps.postponeAlarm(alarmId, minutes));
+  handlers.handle('alarm-preview', (_event, value: unknown) => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return { ok: false, error: 'Invalid preview settings.' };
+    const options = value as Record<string, unknown>;
+    if ((options.notificationMode !== 'window' && options.notificationMode !== 'system' && options.notificationMode !== 'both')
+      || (options.sound !== 'classic' && options.sound !== 'digital' && options.sound !== 'gentle' && options.sound !== 'none')
+      || !Number.isInteger(options.hour) || Number(options.hour) < 0 || Number(options.hour) > 23
+      || !Number.isInteger(options.minute) || Number(options.minute) < 0 || Number(options.minute) > 59
+      || !Number.isInteger(options.second) || Number(options.second) < 0 || Number(options.second) > 59
+      || (options.message !== undefined && (typeof options.message !== 'string' || options.message.length > 500))) {
+      return { ok: false, error: 'Invalid preview settings.' };
+    }
+    deps.previewAlarm(options as { notificationMode: 'window' | 'system' | 'both'; message?: string; sound: 'classic' | 'digital' | 'gentle' | 'none'; hour: number; minute: number; second: number });
+    return { ok: true };
+  });
+  handlers.on('alarm-preview-close', () => deps.closeAlarmPreview());
   handlers.on('countdown-window-toggle', () => deps.toggleCountdownWindow());
   handlers.on('countdown-window-close', () => deps.destroyCountdownWindow());
   handlers.on('countdown-window-menu', () => deps.showCountdownWindowMenu());
