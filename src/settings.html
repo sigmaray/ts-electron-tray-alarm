@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Settings</title>
+  <link rel="stylesheet" href="../node_modules/bootstrap/dist/css/bootstrap.min.css">
+</head>
+<body class="bg-body-tertiary">
+  <main class="container py-4">
+    <h1 class="h3 mb-4">Settings</h1>
+    <section class="card shadow-sm mb-3">
+      <div class="card-header fw-semibold">Time zone</div>
+      <div class="card-body">
+        <label class="form-label" for="settingsTimezone">Application time zone</label>
+        <select id="settingsTimezone" class="form-select"></select>
+        <p id="settingsTimezoneCurrent" class="form-text mb-0 mt-2"></p>
+      </div>
+    </section>
+
+    <section class="card shadow-sm mb-3">
+      <div class="card-header fw-semibold">Application</div>
+      <div class="card-body">
+        <div class="form-check">
+          <input id="confirmQuit" class="form-check-input" type="checkbox" checked>
+          <label class="form-check-label" for="confirmQuit">Ask for confirmation before quitting</label>
+        </div>
+      </div>
+    </section>
+
+    <section class="card shadow-sm mb-3">
+      <div class="card-header fw-semibold">Countdown window</div>
+      <div class="card-body">
+        <label class="form-label" for="countdownFormat">Remaining time format</label>
+        <select id="countdownFormat" class="form-select">
+          <option value="compact">Minutes: 2m, 1m, &lt; 1m</option>
+          <option value="clock">Time with seconds: 00:01:51</option>
+          <option value="seconds">Total seconds: 111s</option>
+        </select>
+      </div>
+    </section>
+
+    <p id="settingsStatus" class="small text-body-secondary" role="status" aria-live="polite"></p>
+    <div class="d-flex justify-content-end gap-2">
+      <button id="settingsCancel" class="btn btn-secondary">Close</button>
+      <button id="settingsSave" class="btn btn-primary">Save</button>
+    </div>
+  </main>
+  <script>
+    const api = window.electronAPI;
+    const timezoneSelect = document.getElementById('settingsTimezone');
+    const timezoneCurrent = document.getElementById('settingsTimezoneCurrent');
+    const confirmQuit = document.getElementById('confirmQuit');
+    const countdownFormat = document.getElementById('countdownFormat');
+    const status = document.getElementById('settingsStatus');
+
+    async function initializeSettings() {
+      try {
+        const [timezones, timezone, preferences] = await Promise.all([
+          api.getTimezones(), api.getCurrentTimezone(), api.getAppPreferences(),
+        ]);
+        timezoneSelect.add(new Option('System time zone (default)', ''));
+        [...timezones].sort().forEach(zone => timezoneSelect.add(new Option(zone, zone)));
+        timezoneSelect.value = timezone.isSystem ? '' : timezone.effective;
+        timezoneCurrent.textContent = `Currently using: ${timezone.effective}`;
+        confirmQuit.checked = preferences.confirmQuit;
+        countdownFormat.value = preferences.countdownFormat;
+      } catch (error) {
+        status.textContent = `Could not load settings: ${error.message || error}`;
+      }
+    }
+
+    document.getElementById('settingsSave').addEventListener('click', async () => {
+      const saveButton = document.getElementById('settingsSave');
+      saveButton.disabled = true;
+      status.textContent = 'Saving…';
+      try {
+        await api.setTimezone(timezoneSelect.value || null);
+        const result = await api.saveAppPreferences({
+          confirmQuit: confirmQuit.checked,
+          countdownFormat: countdownFormat.value,
+        });
+        if (!result.ok) throw new Error(result.error || 'Could not save settings.');
+        status.textContent = 'Settings saved.';
+        window.close();
+      } catch (error) {
+        status.textContent = error.message || 'Could not save settings.';
+      } finally {
+        saveButton.disabled = false;
+      }
+    });
+    document.getElementById('settingsCancel').addEventListener('click', () => window.close());
+    initializeSettings();
+  </script>
+</body>
+</html>

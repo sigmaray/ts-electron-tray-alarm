@@ -16,6 +16,7 @@ declare global {
 }
 
 let mainWindow: BrowserWindow | null = null;
+let settingsWindow: BrowserWindow | null = null;
 let countdownWindow: BrowserWindow | null = null;
 let alarmDialogWindow: BrowserWindow | null = null;
 let activeAlarmId: string | null = null;
@@ -57,9 +58,26 @@ let countdownWindowVisiblePref = false;
 let countdownWindowPosition: CountdownWindowPosition | undefined;
 let countdownPositionSaveTimer: NodeJS.Timeout | null = null;
 let timezonePref: string | null = null; // null means use the system time zone
+let confirmQuitPref = true;
+let countdownFormatPref: 'compact' | 'clock' | 'seconds' = 'compact';
 
 function saveSettings(): void {
-  settingsStore?.save({ alarms, countdownWindowVisible: countdownWindowVisiblePref, countdownWindowPosition, timezone: timezonePref });
+  settingsStore?.save({
+    alarms, countdownWindowVisible: countdownWindowVisiblePref, countdownWindowPosition,
+    timezone: timezonePref, confirmQuit: confirmQuitPref, countdownFormat: countdownFormatPref,
+  });
+}
+
+async function requestQuit(): Promise<void> {
+  if (confirmQuitPref) {
+    const result = await dialog.showMessageBox(mainWindow || null as any, {
+      type: 'question', buttons: ['Cancel', 'Close'], defaultId: 0, cancelId: 0,
+      title: 'Confirmation', message: 'Are you sure you want to quit the application?',
+    });
+    if (result.response !== 1) return;
+  }
+  app.isQuitting = true;
+  app.quit();
 }
 
 // Save alarms and all other settings to disk
@@ -88,21 +106,7 @@ function updateTrayMenu(): void {
     },
     {
       label: 'Quit',
-      click: async () => {
-        const result = await dialog.showMessageBox(mainWindow || null as any, {
-          type: 'question',
-          buttons: ['Cancel', 'Close'],
-          defaultId: 0,
-          cancelId: 0,
-          title: 'Confirmation',
-          message: 'Are you sure you want to quit the application?'
-        });
-
-        if (result.response === 1) {
-          app.isQuitting = true;
-          app.quit();
-        }
-      },
+      click: () => { void requestQuit(); },
     },
   ]);
 
@@ -268,10 +272,17 @@ function updateTrayIcon(): void {
 }
 
 function formatTimeForCountdownWindow(seconds: number): string {
-  if (seconds <= 0) return '—';
-  if (seconds < 60) return '< 1m';
-  const hours = Math.floor(seconds / 3600);
-  const minutes = Math.floor((seconds % 3600) / 60);
+  const remaining = Math.max(0, Math.floor(seconds));
+  if (countdownFormatPref === 'seconds') return `${remaining}s`;
+  if (countdownFormatPref === 'clock') {
+    const hours = Math.floor(remaining / 3600);
+    const minutes = Math.floor((remaining % 3600) / 60);
+    const secs = remaining % 60;
+    return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+  }
+  if (remaining < 60) return '< 1m';
+  const hours = Math.floor(remaining / 3600);
+  const minutes = Math.floor((remaining % 3600) / 60);
   const parts: string[] = [];
   if (hours > 0) parts.push(`${hours}h`);
   parts.push(`${minutes}m`);
@@ -750,6 +761,40 @@ function createWindow(): void {
   mainWindow.on('hide', updateTrayMenu);
 }
 
+function openSettingsWindow(): void {
+  if (settingsWindow && !settingsWindow.isDestroyed()) {
+    settingsWindow.show();
+    settingsWindow.focus();
+    return;
+  }
+  const primaryWorkArea = screen.getPrimaryDisplay().workArea;
+  const settingsWidth = 560;
+  const settingsHeight = 560;
+  settingsWindow = new BrowserWindow({
+    width: settingsWidth,
+    height: settingsHeight,
+    x: primaryWorkArea.x + Math.round((primaryWorkArea.width - settingsWidth) / 2),
+    y: primaryWorkArea.y + Math.round((primaryWorkArea.height - settingsHeight) / 2),
+    resizable: false,
+    show: false,
+    title: 'Settings',
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+      preload: path.join(__dirname, 'preload.js'),
+    },
+  });
+  settingsWindow.loadFile(path.join(__dirname, 'settings.html'));
+  settingsWindow.once('ready-to-show', () => {
+    settingsWindow?.show();
+    settingsWindow?.setPosition(
+      primaryWorkArea.x + Math.round((primaryWorkArea.width - settingsWidth) / 2),
+      primaryWorkArea.y + Math.round((primaryWorkArea.height - settingsHeight) / 2),
+    );
+  });
+  settingsWindow.on('closed', () => { settingsWindow = null; });
+}
+
 function createTray(): void {
   // Start with a dash icon
   tray = new Tray(createTextIcon('—', false));
@@ -792,6 +837,8 @@ function initializeApp(): void {
   countdownWindowVisiblePref = settings.countdownWindowVisible;
   countdownWindowPosition = settings.countdownWindowPosition;
   timezonePref = settings.timezone ?? null;
+  confirmQuitPref = settings.confirmQuit ?? true;
+  countdownFormatPref = settings.countdownFormat ?? 'compact';
   const now = Date.now();
   alarms = settings.alarms.map(alarm => scheduleAlarm(alarm, getEffectiveTimezone(), now));
   if (alarms.some((alarm, index) => alarm.scheduledAt !== settings.alarms[index].scheduledAt)) saveSettings();
@@ -835,6 +882,27 @@ function initializeApp(): void {
     stopBlinking,
     notifyAlarmDismissed: () => {
       if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('alarm-dismiss-from-main');
+    },
+    openSettingsWindow,
+    requestQuit: () => { void requestQuit(); },
+    getAppPreferences: () => ({ confirmQuit: confirmQuitPref, countdownFormat: countdownFormatPref }),
+    saveAppPreferences: value => {
+      if (!value || typeof value !== 'object' || Array.isArray(value)) return { ok: false, error: 'Invalid settings.' };
+      const candidate = value as Record<string, unknown>;
+      if (typeof candidate.confirmQuit !== 'boolean'
+        || (candidate.countdownFormat !== 'compact' && candidate.countdownFormat !== 'clock' && candidate.countdownFormat !== 'seconds')) {
+        return { ok: false, error: 'Invalid settings.' };
+      }
+      confirmQuitPref = candidate.confirmQuit;
+      countdownFormatPref = candidate.countdownFormat;
+      saveSettings();
+      updateCountdownWindow();
+      return { ok: true };
+    },
+    notifyTimezoneUpdated: () => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('timezone-updated', { effective: getEffectiveTimezone(), isSystem: timezonePref === null });
+      }
     },
     postponeAlarm: (alarmId, minutes) => {
       if (alarmId !== activeAlarmId || !Number.isInteger(minutes) || minutes < 1 || minutes > 60) return { ok: false, error: 'Invalid postpone request.' };

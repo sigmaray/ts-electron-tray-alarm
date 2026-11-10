@@ -35,6 +35,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   closeApp: () => {
     ipcRenderer.send('close-app');
   },
+  openSettingsWindow: () => ipcRenderer.send('settings-window-open'),
+  getAppPreferences: () => ipcRenderer.invoke('get-app-preferences') as Promise<{ confirmQuit: boolean; countdownFormat: 'compact' | 'clock' | 'seconds' }>,
+  saveAppPreferences: (preferences: { confirmQuit: boolean; countdownFormat: 'compact' | 'clock' | 'seconds' }) =>
+    ipcRenderer.invoke('save-app-preferences', preferences) as Promise<{ ok: boolean; error?: string }>,
   // Alarm commands
   addAlarm: (alarm: Alarm) => ipcRenderer.invoke('alarm-add', alarm) as Promise<AlarmOperationResult>,
   updateAlarm: (alarm: Alarm) => ipcRenderer.invoke('alarm-update', alarm) as Promise<AlarmOperationResult>,
@@ -81,5 +85,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getTimezones: () => ipcRenderer.invoke('get-timezones') as Promise<string[]>,
   getCurrentTimezone: () => ipcRenderer.invoke('get-current-timezone') as Promise<{ effective: string; isSystem: boolean }>,
   setTimezone: (tz: string | null) => ipcRenderer.invoke('set-timezone', tz) as Promise<{ effective: string; isSystem: boolean }>,
+  onTimezoneUpdated: (callback: (info: { effective: string; isSystem: boolean }) => void) => {
+    ipcRenderer.on('timezone-updated', (_event, info) => callback(info));
+  },
 });
 

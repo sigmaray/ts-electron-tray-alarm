@@ -81,29 +81,10 @@
         <button id="dismissAlarmBtn" class="alarm-app__dismiss btn btn-danger mb-3" style="display: none;">Dismiss Alarm</button>
 
         <div class="app-controls d-flex flex-wrap justify-content-center gap-2 mt-3">
-            <button id="timezoneBtn" class="btn btn-secondary">Set Time Zone</button>
+            <button id="settingsBtn" class="btn btn-secondary">Settings</button>
             <button id="countdownWindowBtn" class="btn btn-secondary">Show Countdown Window</button>
             <button id="minimizeBtn" class="btn btn-secondary">Minimize to Tray</button>
             <button id="closeBtn" class="app-controls__button--close btn btn-danger">Close</button>
-        </div>
-
-        <div id="timezoneModalOverlay" class="modal fade modal-overlay" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="timezoneModalTitle">
-            <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
-                <div class="modal-content">
-                    <div class="modal-header">
-                        <h2 class="timezone-picker__title modal-title fs-5" id="timezoneModalTitle">Select Time Zone</h2>
-                    </div>
-                    <div class="modal-body timezone-picker">
-                        <p class="timezone-picker__current" id="timezoneCurrentLabel">Current: System Default</p>
-                        <label class="form-label" for="timezoneList">Time zone</label>
-                        <select id="timezoneList" class="form-select timezone-picker__select"></select>
-                    </div>
-                    <div class="modal-footer">
-                        <button id="timezoneCancelBtn" class="btn btn-secondary">Cancel</button>
-                        <button id="timezoneSaveBtn" class="btn btn-primary">Save</button>
-                    </div>
-                </div>
-            </div>
         </div>
 
         <div id="alarmOptionsOverlay" class="modal fade modal-overlay" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="alarmOptionsTitle">

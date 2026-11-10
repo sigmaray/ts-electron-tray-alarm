@@ -20,6 +20,7 @@ interface Alarm {
 interface ElectronAPI {
   minimizeWindow: () => void;
   closeApp: () => void;
+  openSettingsWindow: () => void;
   addAlarm: (alarm: Alarm) => Promise<{ ok: boolean; error?: string }>;
   updateAlarm: (alarm: Alarm) => Promise<{ ok: boolean; error?: string }>;
   deleteAlarm: (alarmId: string) => Promise<{ ok: boolean; error?: string }>;
@@ -35,7 +36,7 @@ interface ElectronAPI {
   onCountdownUpdate: (callback: (text: string) => void) => void;
   getTimezones: () => Promise<string[]>;
   getCurrentTimezone: () => Promise<{ effective: string; isSystem: boolean }>;
-  setTimezone: (tz: string | null) => Promise<{ effective: string; isSystem: boolean }>;
+  onTimezoneUpdated: (callback: (info: { effective: string; isSystem: boolean }) => void) => void;
 }
 
 let alarms: Alarm[] = [];
@@ -635,15 +636,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
   if (closeBtn) {
     closeBtn.addEventListener('click', () => {
-      const confirmed = confirm('Are you sure you want to quit the application?');
-      if (confirmed) {
-        const electronAPI = (window as any).electronAPI as ElectronAPI | undefined;
-        if (electronAPI) {
-          electronAPI.closeApp();
-        }
-      }
+      const electronAPI = (window as any).electronAPI as ElectronAPI | undefined;
+      electronAPI?.closeApp();
     });
   }
+
+  document.getElementById('settingsBtn')?.addEventListener('click', () => {
+    const api = (window as any).electronAPI as ElectronAPI | undefined;
+    api?.openSettingsWindow();
+  });
 
   // Handle the Dismiss Alarm button
   const dismissBtn = document.getElementById('dismissAlarmBtn');
@@ -651,74 +652,10 @@ document.addEventListener('DOMContentLoaded', () => {
     dismissBtn.addEventListener('click', dismissAlarm);
   }
 
-  // Time zone selection dialog
-  const timezoneBtn = document.getElementById('timezoneBtn');
-  const timezoneModalOverlay = document.getElementById('timezoneModalOverlay');
-  const timezoneList = document.getElementById('timezoneList') as HTMLSelectElement | null;
-  const timezoneCurrentLabel = document.getElementById('timezoneCurrentLabel');
-  const timezoneSaveBtn = document.getElementById('timezoneSaveBtn');
-  const timezoneCancelBtn = document.getElementById('timezoneCancelBtn');
-
-  let allTimezones: string[] = [];
-  let selectedTimezoneValue: string | null = null;
-
-  function renderTimezoneOptions(): void {
-    if (!timezoneList) return;
-    timezoneList.replaceChildren(new Option('System time zone (default)', ''));
-    const timezones = selectedTimezoneValue && !allTimezones.includes(selectedTimezoneValue)
-      ? [...allTimezones, selectedTimezoneValue].sort()
-      : allTimezones;
-    timezones.forEach(timezone => timezoneList.add(new Option(timezone, timezone)));
-    timezoneList.value = selectedTimezoneValue ?? '';
-  }
-
-  if (timezoneBtn && timezoneModalOverlay && electronAPI) {
-    timezoneBtn.addEventListener('click', async () => {
-      const { effective, isSystem } = await electronAPI.getCurrentTimezone();
-      timezoneCurrentLabel!.textContent = isSystem
-        ? `Current: System time zone (${effective})`
-        : 'Current: ' + effective;
-      selectedTimezoneValue = isSystem ? null : effective;
-      if (allTimezones.length === 0) {
-        allTimezones = await electronAPI.getTimezones();
-        allTimezones.sort();
-      }
-      renderTimezoneOptions();
-      if (timezoneList) {
-        timezoneList.onchange = () => {
-          selectedTimezoneValue = timezoneList.value || null;
-        };
-      }
-      timezoneModalOverlay.classList.add('modal-overlay--visible', 'show');
-      timezoneList?.focus();
-    });
-  }
-
-  if (timezoneSaveBtn && timezoneModalOverlay && electronAPI) {
-    timezoneSaveBtn.addEventListener('click', async () => {
-      const { effective, isSystem } = await electronAPI.setTimezone(selectedTimezoneValue);
-      currentTimezoneInfo = { effective, isSystem };
-      updateTimeTimezoneDisplay();
-      renderAlarms();
-      timezoneCurrentLabel!.textContent = isSystem
-        ? `Current: System time zone (${effective})`
-        : 'Current: ' + effective;
-      timezoneModalOverlay.classList.remove('modal-overlay--visible', 'show');
-    });
-  }
-
-  if (timezoneCancelBtn && timezoneModalOverlay) {
-    timezoneCancelBtn.addEventListener('click', () => {
-      timezoneModalOverlay.classList.remove('modal-overlay--visible', 'show');
-    });
-  }
-
-  if (timezoneModalOverlay) {
-    timezoneModalOverlay.addEventListener('click', (e) => {
-      if (e.target === timezoneModalOverlay) {
-        timezoneModalOverlay.classList.remove('modal-overlay--visible', 'show');
-      }
-    });
-  }
+  electronAPI?.onTimezoneUpdated(info => {
+    currentTimezoneInfo = info;
+    updateTimeTimezoneDisplay();
+    renderAlarms();
+  });
 });
 

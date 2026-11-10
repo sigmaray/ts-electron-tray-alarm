@@ -1,4 +1,4 @@
-import { app, ipcMain, IpcMain } from 'electron';
+import { ipcMain, IpcMain } from 'electron';
 import { Alarm, isValidAlarmPayload, normalizeTimeZone } from './settings';
 import { hasDuplicateAlarm, isAlarmDateInFuture, rescheduleAlarmsForTimezone, scheduleAlarm } from './alarm-scheduling';
 
@@ -15,6 +15,11 @@ export interface IpcDependencies {
   stopBlinking(): void;
   postponeAlarm(alarmId: string, minutes: number): { ok: boolean; error?: string };
   notifyAlarmDismissed(): void;
+  openSettingsWindow(): void;
+  requestQuit(): void;
+  getAppPreferences(): { confirmQuit: boolean; countdownFormat: 'compact' | 'clock' | 'seconds' };
+  saveAppPreferences(value: unknown): { ok: boolean; error?: string };
+  notifyTimezoneUpdated(): void;
   getEffectiveTimezone(): string;
   getTimezonePref(): string | null;
   setTimezonePref(timezone: string | null): void;
@@ -70,7 +75,10 @@ export function registerIpcHandlers(deps: IpcDependencies, handlers: IpcMain = i
   handlers.on('alarm-get-all', () => deps.sendAlarmsToRenderer());
   handlers.on('minimize-window', () => deps.minimizeWindow());
   handlers.on('tray-click', () => deps.trayClick());
-  handlers.on('close-app', () => { app.isQuitting = true; app.quit(); });
+  handlers.on('close-app', () => deps.requestQuit());
+  handlers.on('settings-window-open', () => deps.openSettingsWindow());
+  handlers.handle('get-app-preferences', () => deps.getAppPreferences());
+  handlers.handle('save-app-preferences', (_event, value: unknown) => deps.saveAppPreferences(value));
   handlers.on('alarm-dismiss', () => { deps.stopBlinking(); deps.notifyAlarmDismissed(); });
   handlers.handle('alarm-postpone', (_event, alarmId: string, minutes: number) => deps.postponeAlarm(alarmId, minutes));
   handlers.on('countdown-window-toggle', () => deps.toggleCountdownWindow());
@@ -96,6 +104,7 @@ export function registerIpcHandlers(deps: IpcDependencies, handlers: IpcMain = i
     deps.saveSettings();
     deps.updateTrayIcon();
     deps.sendAlarmsToRenderer();
+    deps.notifyTimezoneUpdated();
     return { effective: deps.getEffectiveTimezone(), isSystem: deps.getTimezonePref() === null };
   });
 }
