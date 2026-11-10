@@ -21,7 +21,7 @@
       overflow: hidden;
     }
     .countdown-widget {
-      background-color: #5B7FA6FF !important;
+      background-color: var(--countdown-background-color, #5b7fa6) !important;
       font-size: var(--countdown-font-size, 15pt);
       width: max-content;
       flex: 0 0 auto;
@@ -52,7 +52,7 @@
     .countdown-widget__menu.btn:hover,
     .countdown-widget__menu.btn:focus {
       color: #fff;
-      background-color: #5B7FA6FF;
+      background-color: var(--countdown-background-color, #5b7fa6);
       border: 1px solid #fff;
       box-shadow: none;
     }
@@ -103,6 +103,11 @@
         window.electronAPI.onCountdownFontSize(function(size) {
           const points = Number.isInteger(size) && size >= 8 && size <= 32 ? size : 15;
           widget.style.setProperty('--countdown-font-size', points + 'pt');
+        });
+      }
+      if (widget && window.electronAPI && typeof window.electronAPI.onCountdownBackgroundColor === 'function') {
+        window.electronAPI.onCountdownBackgroundColor(function(color) {
+          if (/^#[0-9a-f]{6}$/i.test(color)) widget.style.setProperty('--countdown-background-color', color);
         });
       }
       var menuBtn = document.getElementById('countdown-menu');

@@ -40,6 +40,11 @@ interface ElectronAPI {
   getTimezones: () => Promise<string[]>;
   getCurrentTimezone: () => Promise<{ effective: string; isSystem: boolean }>;
   onTimezoneUpdated: (callback: (info: { effective: string; isSystem: boolean }) => void) => void;
+  getAppPreferences: () => Promise<{
+    mainWindowBackgroundColor: string;
+    countdownBackgroundColor: string;
+  }>;
+  onAppColorsUpdated: (callback: (colors: { mainWindowBackgroundColor: string; countdownBackgroundColor: string }) => void) => void;
 }
 
 let alarms: Alarm[] = [];
@@ -585,6 +590,12 @@ function clearPendingNewAlarm(): void {
 // Initialize when the page loads
 document.addEventListener('DOMContentLoaded', () => {
   const electronAPI = (window as any).electronAPI as ElectronAPI | undefined;
+  const applyColors = (colors: { mainWindowBackgroundColor: string }) => {
+    if (isStandaloneAddWindow || !/^#[0-9a-f]{6}$/i.test(colors.mainWindowBackgroundColor)) return;
+    document.body.style.setProperty('background-color', colors.mainWindowBackgroundColor, 'important');
+  };
+  electronAPI?.onAppColorsUpdated(applyColors);
+  void electronAPI?.getAppPreferences().then(applyColors);
   const optionsOverlay = document.getElementById('alarmOptionsOverlay');
   document.getElementById('addAlarmBtn')?.addEventListener('click', () => {
     clearPendingNewAlarm();

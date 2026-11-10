@@ -60,6 +60,37 @@
       </div>
     </section>
 
+    <section class="card shadow-sm mb-3">
+      <div class="card-header fw-semibold">Colors</div>
+      <div class="card-body">
+        <div class="mb-3">
+          <label class="form-label" for="trayIconColor">Tray icon background</label>
+          <div class="input-group">
+            <input id="trayIconColor" class="form-control form-control-color flex-shrink-0" style="width: 3.5rem" type="color" value="#5b7fa6" title="Choose tray icon color">
+            <span class="input-group-text">HEX</span>
+            <input id="trayIconColorHex" class="form-control font-monospace" type="text" value="#5b7fa6" maxlength="7" pattern="#[0-9a-fA-F]{6}" placeholder="#5b7fa6" aria-label="Tray icon background HEX color" autocomplete="off" spellcheck="false">
+          </div>
+        </div>
+        <div class="mb-3">
+          <label class="form-label" for="countdownBackgroundColor">Countdown window background</label>
+          <div class="input-group">
+            <input id="countdownBackgroundColor" class="form-control form-control-color flex-shrink-0" style="width: 3.5rem" type="color" value="#5b7fa6" title="Choose countdown window background color">
+            <span class="input-group-text">HEX</span>
+            <input id="countdownBackgroundColorHex" class="form-control font-monospace" type="text" value="#5b7fa6" maxlength="7" pattern="#[0-9a-fA-F]{6}" placeholder="#5b7fa6" aria-label="Countdown window background HEX color" autocomplete="off" spellcheck="false">
+          </div>
+        </div>
+        <div>
+          <label class="form-label" for="mainWindowBackgroundColor">Main window background</label>
+          <div class="input-group">
+            <input id="mainWindowBackgroundColor" class="form-control form-control-color flex-shrink-0" style="width: 3.5rem" type="color" value="#f8f9fa" title="Choose main window background color">
+            <span class="input-group-text">HEX</span>
+            <input id="mainWindowBackgroundColorHex" class="form-control font-monospace" type="text" value="#f8f9fa" maxlength="7" pattern="#[0-9a-fA-F]{6}" placeholder="#f8f9fa" aria-label="Main window background HEX color" autocomplete="off" spellcheck="false">
+          </div>
+        </div>
+        <button id="resetColors" class="btn btn-link px-0 pb-0">Reset colors to defaults</button>
+      </div>
+    </section>
+
     <p id="settingsStatus" class="small text-body-secondary" role="status" aria-live="polite"></p>
     <div class="d-flex justify-content-end gap-2">
       <button id="settingsCancel" class="btn btn-secondary">Close</button>
@@ -75,7 +106,38 @@
     const countdownFormat = document.getElementById('countdownFormat');
     const countdownFontSize = document.getElementById('countdownFontSize');
     const countdownMenuButtonVisible = document.getElementById('countdownMenuButtonVisible');
+    const trayIconColor = document.getElementById('trayIconColor');
+    const countdownBackgroundColor = document.getElementById('countdownBackgroundColor');
+    const mainWindowBackgroundColor = document.getElementById('mainWindowBackgroundColor');
+    const colorPairs = [
+      { picker: trayIconColor, hex: document.getElementById('trayIconColorHex') },
+      { picker: countdownBackgroundColor, hex: document.getElementById('countdownBackgroundColorHex') },
+      { picker: mainWindowBackgroundColor, hex: document.getElementById('mainWindowBackgroundColorHex') },
+    ];
     const status = document.getElementById('settingsStatus');
+
+    function isHexColor(value) {
+      return /^#[0-9a-fA-F]{6}$/.test(value.trim());
+    }
+
+    colorPairs.forEach(pair => {
+      pair.picker.addEventListener('input', () => {
+        pair.hex.value = pair.picker.value;
+        pair.hex.setCustomValidity('');
+      });
+      pair.hex.addEventListener('input', () => {
+        const value = pair.hex.value.trim();
+        if (isHexColor(value)) {
+          pair.picker.value = value.toLowerCase();
+          pair.hex.setCustomValidity('');
+        } else {
+          pair.hex.setCustomValidity('Enter a color in #RRGGBB format.');
+        }
+      });
+      pair.hex.addEventListener('blur', () => {
+        if (isHexColor(pair.hex.value)) pair.hex.value = pair.picker.value;
+      });
+    });
 
     async function initializeSettings() {
       try {
@@ -90,12 +152,23 @@
         countdownFormat.value = preferences.countdownFormat;
         countdownFontSize.value = String(preferences.countdownFontSize || 15);
         countdownMenuButtonVisible.checked = preferences.countdownMenuButtonVisible !== false;
+        trayIconColor.value = preferences.trayIconColor || '#5b7fa6';
+        countdownBackgroundColor.value = preferences.countdownBackgroundColor || '#5b7fa6';
+        mainWindowBackgroundColor.value = preferences.mainWindowBackgroundColor || '#f8f9fa';
+        colorPairs.forEach(pair => { pair.hex.value = pair.picker.value; });
       } catch (error) {
         status.textContent = `Could not load settings: ${error.message || error}`;
       }
     }
 
     async function saveSettings(closeAfterSave) {
+      const invalidColor = colorPairs.find(pair => !isHexColor(pair.hex.value));
+      if (invalidColor) {
+        invalidColor.hex.setCustomValidity('Enter a color in #RRGGBB format.');
+        invalidColor.hex.reportValidity();
+        invalidColor.hex.focus();
+        return;
+      }
       const buttons = [document.getElementById('settingsApply'), document.getElementById('settingsSave')];
       buttons.forEach(button => button.disabled = true);
       status.textContent = 'Saving…';
@@ -106,6 +179,9 @@
           countdownFormat: countdownFormat.value,
           countdownMenuButtonVisible: countdownMenuButtonVisible.checked,
           countdownFontSize: Number(countdownFontSize.value),
+          trayIconColor: colorPairs[0].hex.value.trim().toLowerCase(),
+          countdownBackgroundColor: colorPairs[1].hex.value.trim().toLowerCase(),
+          mainWindowBackgroundColor: colorPairs[2].hex.value.trim().toLowerCase(),
         });
         if (!result.ok) throw new Error(result.error || 'Could not save settings.');
         status.textContent = closeAfterSave ? 'Settings saved.' : 'Settings applied.';
@@ -119,6 +195,14 @@
     document.getElementById('settingsApply').addEventListener('click', () => saveSettings(false));
     document.getElementById('settingsSave').addEventListener('click', () => saveSettings(true));
     document.getElementById('settingsCancel').addEventListener('click', () => window.close());
+    document.getElementById('resetColors').addEventListener('click', () => {
+      const defaults = ['#5b7fa6', '#5b7fa6', '#f8f9fa'];
+      colorPairs.forEach((pair, index) => {
+        pair.picker.value = defaults[index];
+        pair.hex.value = defaults[index];
+        pair.hex.setCustomValidity('');
+      });
+    });
     initializeSettings();
   </script>
 </body>

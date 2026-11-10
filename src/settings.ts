@@ -29,6 +29,9 @@ export interface AppSettings {
   countdownFormat?: 'compact' | 'clock' | 'seconds';
   countdownMenuButtonVisible?: boolean;
   countdownFontSize?: number;
+  trayIconColor?: string;
+  countdownBackgroundColor?: string;
+  mainWindowBackgroundColor?: string;
 }
 
 export interface CountdownWindowPosition {
@@ -48,6 +51,15 @@ export interface SettingsPaths {
 }
 
 export const DEFAULT_SETTINGS: AppSettings = { alarms: [], countdownWindowVisible: true };
+
+export const DEFAULT_TRAY_ICON_COLOR = '#5b7fa6';
+export const DEFAULT_COUNTDOWN_BACKGROUND_COLOR = '#5b7fa6';
+export const DEFAULT_MAIN_WINDOW_BACKGROUND_COLOR = '#f8f9fa';
+
+export function normalizeHexColor(value: unknown): string | null {
+  if (typeof value !== 'string' || !/^#[0-9a-fA-F]{6}$/.test(value)) return null;
+  return value.toLowerCase();
+}
 
 function defaultSettings(): AppSettings {
   return { alarms: [], countdownWindowVisible: true };
@@ -184,6 +196,9 @@ export function parseSettings(raw: unknown): AppSettings {
           : value.countdownFontSize === 'medium'
             ? { countdownFontSize: 15 }
             : {}),
+    ...(normalizeHexColor(value.trayIconColor) ? { trayIconColor: normalizeHexColor(value.trayIconColor)! } : {}),
+    ...(normalizeHexColor(value.countdownBackgroundColor) ? { countdownBackgroundColor: normalizeHexColor(value.countdownBackgroundColor)! } : {}),
+    ...(normalizeHexColor(value.mainWindowBackgroundColor) ? { mainWindowBackgroundColor: normalizeHexColor(value.mainWindowBackgroundColor)! } : {}),
   };
 }
 

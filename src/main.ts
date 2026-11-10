@@ -1,7 +1,10 @@
 import { app, BrowserWindow, Tray, Menu, nativeImage, dialog, screen, Notification } from 'electron';
 import * as path from 'path';
 import { createCanvas } from 'canvas';
-import { Alarm, CountdownWindowPosition, createSettingsStore } from './settings';
+import {
+  Alarm, CountdownWindowPosition, createSettingsStore, normalizeHexColor,
+  DEFAULT_TRAY_ICON_COLOR, DEFAULT_COUNTDOWN_BACKGROUND_COLOR, DEFAULT_MAIN_WINDOW_BACKGROUND_COLOR,
+} from './settings';
 import { registerIpcHandlers } from './ipc-handlers';
 import { scheduleAlarm } from './alarm-scheduling';
 import { localDateTimeInTimezone, nextAlarmTimestamp, zonedDateTimeToTimestamp } from './time.js';
@@ -82,6 +85,9 @@ let confirmQuitPref = true;
 let countdownFormatPref: 'compact' | 'clock' | 'seconds' = 'compact';
 let countdownMenuButtonVisiblePref = true;
 let countdownFontSizePref = 15;
+let trayIconColorPref = DEFAULT_TRAY_ICON_COLOR;
+let countdownBackgroundColorPref = DEFAULT_COUNTDOWN_BACKGROUND_COLOR;
+let mainWindowBackgroundColorPref = DEFAULT_MAIN_WINDOW_BACKGROUND_COLOR;
 
 function saveSettings(): void {
   settingsStore?.save({
@@ -89,6 +95,9 @@ function saveSettings(): void {
     timezone: timezonePref, confirmQuit: confirmQuitPref, countdownFormat: countdownFormatPref,
     countdownMenuButtonVisible: countdownMenuButtonVisiblePref,
     countdownFontSize: countdownFontSizePref,
+    trayIconColor: trayIconColorPref,
+    countdownBackgroundColor: countdownBackgroundColorPref,
+    mainWindowBackgroundColor: mainWindowBackgroundColorPref,
   });
 }
 
@@ -229,8 +238,8 @@ function createTextIcon(text: string, isBlinking: boolean = false): Electron.Nat
     // Red while blinking
     bgColor = '#FF0000';
   } else {
-    // Muted blue background matching the window
-    bgColor = '#5b7fa6';
+    // Use the configured tray background color.
+    bgColor = trayIconColorPref;
   }
   
   // Draw the background
@@ -344,7 +353,7 @@ function updateTrayIcon(): void {
     // Blink a red icon with an exclamation mark
     iconText = '!';
     iconIsBlinking = isBlinking;
-    iconKey = `alarm:${isBlinking}`;
+    iconKey = `alarm:${isBlinking}:${trayIconColorPref}`;
     tooltipText = '⏰ Alarm!';
   } else {
     const nearestAlarm = getNearestAlarm();
@@ -353,13 +362,13 @@ function updateTrayIcon(): void {
       const timeUntil = getTimeUntilAlarm(nearestAlarm);
       const text = formatTimeForTray(timeUntil);
       iconText = text;
-      iconKey = `countdown:${text}`;
+      iconKey = `countdown:${text}:${trayIconColorPref}`;
       
       const alarmTime = `${String(nearestAlarm.hour).padStart(2, '0')}:${String(nearestAlarm.minute).padStart(2, '0')}:${String(nearestAlarm.second).padStart(2, '0')}`;
       tooltipText = `Alarm: ${alarmTime} (in ${formatTimeForTooltip(timeUntil)})`;
     } else {
       iconText = '—';
-      iconKey = 'empty';
+      iconKey = `empty:${trayIconColorPref}`;
       tooltipText = 'No alarm set';
     }
   }
@@ -610,6 +619,7 @@ function createCountdownWindow(): void {
       countdownWindowVisiblePref = true;
       countdownWindow.webContents.send('countdown-menu-button-visibility', countdownMenuButtonVisiblePref);
       countdownWindow.webContents.send('countdown-font-size', countdownFontSizePref);
+      countdownWindow.webContents.send('countdown-background-color', countdownBackgroundColorPref);
       saveSettings();
       sendCountdownWindowState();
     }
@@ -956,6 +966,10 @@ function createWindow(): void {
   mainWindow.webContents.once('did-finish-load', () => {
     sendAlarmsToRenderer();
     sendCountdownWindowState();
+    mainWindow?.webContents.send('app-colors-updated', {
+      mainWindowBackgroundColor: mainWindowBackgroundColorPref,
+      countdownBackgroundColor: countdownBackgroundColorPref,
+    });
   });
 
   // Hide the window to the tray instead of quitting when it closes
@@ -1054,6 +1068,9 @@ function initializeApp(): void {
   countdownFormatPref = settings.countdownFormat ?? 'compact';
   countdownMenuButtonVisiblePref = settings.countdownMenuButtonVisible ?? true;
   countdownFontSizePref = settings.countdownFontSize ?? 15;
+  trayIconColorPref = settings.trayIconColor ?? DEFAULT_TRAY_ICON_COLOR;
+  countdownBackgroundColorPref = settings.countdownBackgroundColor ?? DEFAULT_COUNTDOWN_BACKGROUND_COLOR;
+  mainWindowBackgroundColorPref = settings.mainWindowBackgroundColor ?? DEFAULT_MAIN_WINDOW_BACKGROUND_COLOR;
   const now = Date.now();
   alarms = settings.alarms.map(alarm => scheduleAlarm(alarm, getEffectiveTimezone(), now));
   if (alarms.some((alarm, index) => alarm.scheduledAt !== settings.alarms[index].scheduledAt)) saveSettings();
@@ -1107,6 +1124,9 @@ function initializeApp(): void {
       countdownFormat: countdownFormatPref,
       countdownMenuButtonVisible: countdownMenuButtonVisiblePref,
       countdownFontSize: countdownFontSizePref,
+      trayIconColor: trayIconColorPref,
+      countdownBackgroundColor: countdownBackgroundColorPref,
+      mainWindowBackgroundColor: mainWindowBackgroundColorPref,
     }),
     saveAppPreferences: value => {
       if (!value || typeof value !== 'object' || Array.isArray(value)) return { ok: false, error: 'Invalid settings.' };
@@ -1114,18 +1134,32 @@ function initializeApp(): void {
       if (typeof candidate.confirmQuit !== 'boolean'
         || (candidate.countdownFormat !== 'compact' && candidate.countdownFormat !== 'clock' && candidate.countdownFormat !== 'seconds')
         || typeof candidate.countdownMenuButtonVisible !== 'boolean'
-        || !Number.isInteger(candidate.countdownFontSize) || Number(candidate.countdownFontSize) < 8 || Number(candidate.countdownFontSize) > 32) {
+        || !Number.isInteger(candidate.countdownFontSize) || Number(candidate.countdownFontSize) < 8 || Number(candidate.countdownFontSize) > 32
+        || (candidate.trayIconColor !== undefined && !normalizeHexColor(candidate.trayIconColor))
+        || (candidate.countdownBackgroundColor !== undefined && !normalizeHexColor(candidate.countdownBackgroundColor))
+        || (candidate.mainWindowBackgroundColor !== undefined && !normalizeHexColor(candidate.mainWindowBackgroundColor))) {
         return { ok: false, error: 'Invalid settings.' };
       }
       confirmQuitPref = candidate.confirmQuit;
       countdownFormatPref = candidate.countdownFormat;
       countdownMenuButtonVisiblePref = candidate.countdownMenuButtonVisible;
       countdownFontSizePref = Number(candidate.countdownFontSize);
+      trayIconColorPref = normalizeHexColor(candidate.trayIconColor) ?? trayIconColorPref;
+      countdownBackgroundColorPref = normalizeHexColor(candidate.countdownBackgroundColor) ?? countdownBackgroundColorPref;
+      mainWindowBackgroundColorPref = normalizeHexColor(candidate.mainWindowBackgroundColor) ?? mainWindowBackgroundColorPref;
       saveSettings();
+      updateTrayIcon();
       updateCountdownWindow();
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('app-colors-updated', {
+          mainWindowBackgroundColor: mainWindowBackgroundColorPref,
+          countdownBackgroundColor: countdownBackgroundColorPref,
+        });
+      }
       if (countdownWindow && !countdownWindow.isDestroyed()) {
         countdownWindow.webContents.send('countdown-menu-button-visibility', countdownMenuButtonVisiblePref);
         countdownWindow.webContents.send('countdown-font-size', countdownFontSizePref);
+        countdownWindow.webContents.send('countdown-background-color', countdownBackgroundColorPref);
       }
       return { ok: true };
     },

@@ -24,6 +24,16 @@ export interface AlarmOperationResult {
   error?: string;
 }
 
+export interface AppPreferences {
+  confirmQuit: boolean;
+  countdownFormat: 'compact' | 'clock' | 'seconds';
+  countdownMenuButtonVisible: boolean;
+  countdownFontSize: number;
+  trayIconColor: string;
+  countdownBackgroundColor: string;
+  mainWindowBackgroundColor: string;
+}
+
 // Expose a safe API to the renderer process
 contextBridge.exposeInMainWorld('electronAPI', {
   minimizeWindow: () => {
@@ -42,12 +52,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
     countdownFormat: 'compact' | 'clock' | 'seconds';
     countdownMenuButtonVisible: boolean;
     countdownFontSize: number;
+    trayIconColor: string;
+    countdownBackgroundColor: string;
+    mainWindowBackgroundColor: string;
   }>,
   saveAppPreferences: (preferences: {
     confirmQuit: boolean;
     countdownFormat: 'compact' | 'clock' | 'seconds';
     countdownMenuButtonVisible: boolean;
     countdownFontSize: number;
+    trayIconColor: string;
+    countdownBackgroundColor: string;
+    mainWindowBackgroundColor: string;
   }) =>
     ipcRenderer.invoke('save-app-preferences', preferences) as Promise<{ ok: boolean; error?: string }>,
   // Alarm commands
@@ -102,6 +118,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   onCountdownFontSize: (callback: (size: number) => void) => {
     ipcRenderer.on('countdown-font-size', (_event, size) => callback(size));
+  },
+  onCountdownBackgroundColor: (callback: (color: string) => void) => {
+    ipcRenderer.on('countdown-background-color', (_event, color: string) => callback(color));
+  },
+  onAppColorsUpdated: (callback: (colors: Pick<AppPreferences, 'mainWindowBackgroundColor' | 'countdownBackgroundColor'>) => void) => {
+    ipcRenderer.on('app-colors-updated', (_event, colors) => callback(colors));
   },
   // Time zone
   getTimezones: () => ipcRenderer.invoke('get-timezones') as Promise<string[]>,
