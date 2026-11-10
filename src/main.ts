@@ -917,13 +917,13 @@ function openSettingsWindow(): void {
   }
   const primaryWorkArea = screen.getPrimaryDisplay().workArea;
   const settingsWidth = 560;
-  const settingsHeight = 560;
+  const settingsHeight = Math.min(792, primaryWorkArea.height);
   settingsWindow = new BrowserWindow({
     width: settingsWidth,
     height: settingsHeight,
     x: primaryWorkArea.x + Math.round((primaryWorkArea.width - settingsWidth) / 2),
     y: primaryWorkArea.y + Math.round((primaryWorkArea.height - settingsHeight) / 2),
-    resizable: false,
+    resizable: true,
     show: false,
     title: 'Settings',
     webPreferences: {
