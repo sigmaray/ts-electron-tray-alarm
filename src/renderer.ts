@@ -150,6 +150,13 @@ function openAlarmOptions(alarmId?: string): void {
     document.getElementById('alarmOptionsTitle')!.textContent = 'Add alarm';
   }
   const updateHourlyLabel = () => { document.getElementById('hourlyMinuteLabel')!.textContent = minuteInput.value.padStart(2, '0'); };
+  document.querySelectorAll<HTMLButtonElement>('[data-hourly-minute]').forEach(button => {
+    button.onclick = () => {
+      const requestedMinute = Number(button.dataset.hourlyMinute);
+      minuteInput.value = String(requestedMinute % 60).padStart(2, '0');
+      updateHourlyLabel();
+    };
+  });
   const updateSoundControls = () => {
     const soundEnabled = soundEnabledInputs.find(input => input.checked)?.value !== 'no';
     if (soundControls) soundControls.hidden = !soundEnabled;
@@ -173,13 +180,12 @@ function openAlarmOptions(alarmId?: string): void {
     dateControls.hidden = !once;
     dateField.hidden = !once || !dateInput.value;
     setDateButton.hidden = !once || !!dateInput.value;
-    const timeGroup = hourInput.parentElement?.parentElement;
-    if (timeGroup) {
-      (timeGroup.children[0] as HTMLElement).hidden = hourly;
-      (timeGroup.children[1] as HTMLElement).hidden = hourly;
-      (timeGroup.children[3] as HTMLElement).hidden = hourly;
-      (timeGroup.children[4] as HTMLElement).hidden = hourly;
-    }
+    (document.getElementById('alarmOptionsHourGroup') as HTMLElement).hidden = hourly;
+    (document.getElementById('alarmOptionsHourSeparator') as HTMLElement).hidden = hourly;
+    (document.getElementById('alarmOptionsMinuteSeparator') as HTMLElement).hidden = hourly;
+    (document.getElementById('alarmOptionsSecondGroup') as HTMLElement).hidden = hourly;
+    (document.getElementById('hourlyMinuteUnit') as HTMLElement).hidden = !hourly;
+    (document.getElementById('hourlyMinutePresets') as HTMLElement).hidden = !hourly;
     if (hourly) { hourInput.value = '00'; secondInput.value = '00'; }
   };
   frequencyInputs.forEach(input => input.onchange = updateFrequencyFields);

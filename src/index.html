@@ -129,9 +129,17 @@
                 <label class="alarm-options__label form-label" for="alarmOptionsHour">Time</label>
                 <div class="alarm-options__time input-group mb-3">
                     <span id="alarmOptionsHourGroup" class="input-group-text p-0 border-0 bg-transparent"><input type="number" id="alarmOptionsHour" class="alarm-options__time-input form-control" min="0" max="23" aria-label="Hour"></span>
-                    <span class="alarm-options__separator input-group-text">:</span>
+                    <span id="alarmOptionsHourSeparator" class="alarm-options__separator input-group-text">:</span>
                     <input type="number" id="alarmOptionsMinute" class="alarm-options__time-input form-control" min="0" max="59" aria-label="Minute">
-                    <span class="alarm-options__separator input-group-text">:</span>
+                    <span id="hourlyMinuteUnit" class="input-group-text" hidden>minute</span>
+                    <div id="hourlyMinutePresets" class="btn-group" role="group" aria-label="Quick hourly minute" hidden>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" data-hourly-minute="0">at 00</button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" data-hourly-minute="15">at 15</button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" data-hourly-minute="30">at 30</button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" data-hourly-minute="45">at 45</button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" data-hourly-minute="60">at 60</button>
+                    </div>
+                    <span id="alarmOptionsMinuteSeparator" class="alarm-options__separator input-group-text">:</span>
                     <span id="alarmOptionsSecondGroup" class="input-group-text p-0 border-0 bg-transparent"><input type="number" id="alarmOptionsSecond" class="alarm-options__time-input form-control" min="0" max="59" aria-label="Second"></span>
                 </div>
                 <div class="quick-time d-flex flex-wrap justify-content-start gap-2 mb-3">
