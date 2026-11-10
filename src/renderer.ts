@@ -328,11 +328,6 @@ function renderAlarms(): void {
   const container = document.getElementById('alarmsList');
   if (!container) return;
 
-  if (alarms.length === 0) {
-    container.innerHTML = '<div class="alarm-list__empty list-group-item text-center text-secondary">No alarms set</div>';
-    return;
-  }
-
   // Sort alarms by time
   const sortedAlarms = [...alarms].sort((a, b) => {
     if (a.hour !== b.hour) return a.hour - b.hour;
@@ -340,7 +335,7 @@ function renderAlarms(): void {
     return a.second - b.second;
   });
 
-  container.innerHTML = sortedAlarms.map(alarm => {
+  const renderAlarm = (alarm: Alarm): string => {
     const scheduledLocalTime = alarm.scheduledAt === undefined
       ? null
       : getLocalTimeFromTimestamp(currentTimezoneInfo?.effective ?? Intl.DateTimeFormat().resolvedOptions().timeZone, alarm.scheduledAt);
@@ -368,7 +363,7 @@ return `
   <div class="alarm-item list-group-item d-flex flex-wrap justify-content-between align-items-center gap-3" data-id="${alarm.id}">
     <div class="alarm-item__info d-flex flex-wrap align-items-center gap-3">
       <div class="alarm-item__time d-flex flex-column">
-        <span class="alarm-item__time-value fs-3 fw-bold font-monospace">${timeStr}</span>
+        <span class="alarm-item__time-value fs-3 fw-bold font-monospace">${frequency === 'once' && alarm.completed ? `<del>${timeStr}</del>` : timeStr}</span>
         <span class="alarm-item__frequency small text-body-secondary">${frequencyLabel}</span>
         <span class="alarm-item__date badge ${alarm.completed ? 'text-bg-success' : 'text-bg-secondary'} align-self-start">${dateStr}${alarm.completed ? ' · Done' : ''}</span>
         ${alarm.enabled && timeUntilStr ? `<span class="alarm-item__countdown small text-body-secondary">${timeUntilStr}</span>` : ''}
@@ -386,6 +381,25 @@ return `
     </div>
   </div>
 `;
+  };
+
+  if (sortedAlarms.length === 0) {
+    container.innerHTML = '<div class="alarm-list__empty card shadow mb-4 p-3 text-center text-secondary">No alarms set</div>';
+    return;
+  }
+
+  const groups: Array<{ frequency: 'once' | 'daily' | 'hourly'; title: string }> = [
+    { frequency: 'once', title: 'Once' },
+    { frequency: 'daily', title: 'Daily' },
+    { frequency: 'hourly', title: 'Every Hour' },
+  ];
+  container.innerHTML = groups.map(group => {
+    const groupAlarms = sortedAlarms.filter(alarm => (alarm.frequency ?? (alarm.recurring ? 'daily' : 'once')) === group.frequency);
+    if (groupAlarms.length === 0) return '';
+    return `<section class="alarm-list__group card shadow mb-4">
+      <div class="card-header bg-primary text-white"><h2 class="h5 mb-0">${group.title}</h2></div>
+      <div class="list-group list-group-flush">${groupAlarms.map(renderAlarm).join('')}</div>
+    </section>`;
   }).join('');
 
 
