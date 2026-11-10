@@ -1,6 +1,6 @@
 import { ipcMain, IpcMain } from 'electron';
 import { Alarm, isValidAlarmPayload, normalizeTimeZone } from './settings';
-import { hasDuplicateAlarm, isAlarmDateInFuture, rescheduleAlarmsForTimezone, scheduleAlarm } from './alarm-scheduling';
+import { hasDuplicateAlarm, isAlarmDateInFuture, requiresFutureAlarmDate, rescheduleAlarmsForTimezone, scheduleAlarm } from './alarm-scheduling';
 
 export interface IpcDependencies {
   getAlarms(): Alarm[];
@@ -35,7 +35,7 @@ export function registerIpcHandlers(deps: IpcDependencies, handlers: IpcMain = i
     if (!isValidAlarmPayload(alarm) || current.some(existing => existing.id === alarm.id)) {
       return { ok: false, error: 'Invalid alarm data.' };
     }
-    if (alarm.enabled && alarm.scheduledDate && !isAlarmDateInFuture(alarm, deps.getEffectiveTimezone())) {
+    if (alarm.enabled && requiresFutureAlarmDate(alarm) && !isAlarmDateInFuture(alarm, deps.getEffectiveTimezone())) {
       return { ok: false, error: 'Choose a future date and time.' };
     }
     if (current.some(existing => hasDuplicateAlarm(existing, alarm))) {
@@ -52,7 +52,7 @@ export function registerIpcHandlers(deps: IpcDependencies, handlers: IpcMain = i
     if (!isValidAlarmPayload(alarm)) return { ok: false, error: 'Invalid alarm data.' };
     const index = current.findIndex(existing => existing.id === alarm.id);
     if (index < 0) return { ok: false, error: 'Alarm no longer exists.' };
-    if (alarm.enabled && alarm.scheduledDate && !alarm.completed && !isAlarmDateInFuture(alarm, deps.getEffectiveTimezone())) {
+    if (alarm.enabled && !alarm.completed && requiresFutureAlarmDate(alarm) && !isAlarmDateInFuture(alarm, deps.getEffectiveTimezone())) {
       return { ok: false, error: 'Choose a future date and time.' };
     }
     if (current.some(existing => existing.id !== alarm.id && hasDuplicateAlarm(existing, alarm))) {

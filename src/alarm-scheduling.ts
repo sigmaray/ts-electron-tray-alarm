@@ -33,6 +33,11 @@ export function isAlarmDateInFuture(alarm: Alarm, timeZone: string, now: number 
   return target === undefined || target > now;
 }
 
+export function requiresFutureAlarmDate(alarm: Alarm): boolean {
+  const frequency = alarm.frequency ?? (alarm.recurring ? 'daily' : 'once');
+  return frequency === 'once' && alarm.scheduledDate !== undefined;
+}
+
 export function scheduleAlarm(alarm: Alarm, timeZone: string, now: number = Date.now()): Alarm {
   const scheduled = { ...alarm };
   if (!scheduled.enabled) {

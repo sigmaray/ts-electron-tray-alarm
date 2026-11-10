@@ -57,6 +57,7 @@ let ringingAlarmId: string | null = null;
 let optionsAlarmId: string | null = null;
 const isStandaloneAddWindow = new URLSearchParams(location.search).get('alarmDialogOnly') === '1';
 const alarmTime = (window as any).AlarmTime;
+const alarmListOrder = (window as any).AlarmListOrder;
 
 function updateTimeTimezoneDisplay(): void {
   const el = document.getElementById('currentTimeTimezone');
@@ -101,6 +102,7 @@ function openAlarmOptions(alarmId?: string): void {
   const secondInput = document.getElementById('alarmOptionsSecond') as HTMLInputElement | null;
   const dateField = document.getElementById('alarmOptionsDateField');
   const dateControls = document.getElementById('alarmOptionsDateControls');
+  const quickTimeControls = document.querySelector<HTMLElement>('.quick-time');
   const setDateButton = document.getElementById('setAlarmDateBtn') as HTMLButtonElement | null;
   const frequencyInputs = Array.from(document.querySelectorAll<HTMLInputElement>('input[name="alarmFrequency"]'));
   const soundInput = document.getElementById('alarmOptionsSound') as HTMLSelectElement | null;
@@ -165,6 +167,7 @@ function openAlarmOptions(alarmId?: string): void {
     const selectedFrequency = frequencyInputs.find(input => input.checked)?.value;
     const hourly = selectedFrequency === 'hourly';
     const once = selectedFrequency === 'once';
+    if (quickTimeControls) quickTimeControls.style.setProperty('display', hourly ? 'none' : 'flex', 'important');
     dateControls.hidden = !once;
     dateField.hidden = !once || !dateInput.value;
     setDateButton.hidden = !once || !!dateInput.value;
@@ -333,16 +336,6 @@ function renderAlarms(): void {
 
   const sortTimeZone = currentTimezoneInfo?.effective ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
   const sortNow = Date.now();
-  const alarmSortTimestamp = (alarm: Alarm, frequency: 'once' | 'daily' | 'hourly'): number => {
-    if (alarm.scheduledAt !== undefined) return alarm.scheduledAt;
-    if (frequency === 'once' && alarm.scheduledDate) {
-      const [year, month, day] = alarm.scheduledDate.split('-').map(Number);
-      return alarmTime.zonedDateTimeToTimestamp(sortTimeZone, {
-        year, month, day, hour: alarm.hour, minute: alarm.minute, second: alarm.second,
-      });
-    }
-    return alarmTime.nextAlarmTimestamp(sortTimeZone, alarm, sortNow);
-  };
 
   const renderAlarm = (alarm: Alarm): string => {
     const scheduledLocalTime = alarm.scheduledAt === undefined
@@ -403,21 +396,10 @@ return `
     { frequency: 'hourly', title: 'Every Hour' },
   ];
   container.innerHTML = groups.map(group => {
-    const groupAlarms = alarms
-      .filter(alarm => (alarm.frequency ?? (alarm.recurring ? 'daily' : 'once')) === group.frequency)
-      .sort((a, b) => {
-        if (group.frequency === 'hourly') {
-          return Number(b.enabled) - Number(a.enabled)
-            || a.minute - b.minute
-            || a.second - b.second;
-        }
-        const statusRank = (alarm: Alarm): number => alarm.completed ? 2 : alarm.enabled ? 0 : 1;
-        const byStatus = statusRank(a) - statusRank(b);
-        if (byStatus !== 0) return byStatus;
-        const aDistance = Math.abs(alarmSortTimestamp(a, group.frequency) - sortNow);
-        const bDistance = Math.abs(alarmSortTimestamp(b, group.frequency) - sortNow);
-        return aDistance - bDistance;
-      });
+    const groupAlarms = alarmListOrder.sortAlarmsForFrequency(
+      alarms.filter(alarm => (alarm.frequency ?? (alarm.recurring ? 'daily' : 'once')) === group.frequency),
+      group.frequency, sortTimeZone, sortNow,
+    );
     if (groupAlarms.length === 0) return '';
     return `<section class="alarm-list__group card shadow mb-4">
       <div class="card-header bg-primary text-white"><h2 class="h5 mb-0">${group.title}</h2></div>
@@ -426,6 +408,25 @@ return `
   }).join('');
 
 
+}
+
+function updateAlarmCountdowns(): void {
+  alarms.forEach(alarm => {
+    const row = document.querySelector<HTMLElement>(`.alarm-item[data-id="${alarm.id}"]`);
+    const timeBlock = row?.querySelector<HTMLElement>('.alarm-item__time');
+    if (!row || !timeBlock) return;
+    let countdown = timeBlock.querySelector<HTMLElement>('.alarm-item__countdown');
+    if (!alarm.enabled) {
+      countdown?.remove();
+      return;
+    }
+    if (!countdown) {
+      countdown = document.createElement('span');
+      countdown.className = 'alarm-item__countdown small text-body-secondary';
+      timeBlock.appendChild(countdown);
+    }
+    countdown.textContent = formatTimeUntil(getTimeUntilAlarm(alarm));
+  });
 }
 
 function frequencyInputsReset(): void {
@@ -464,7 +465,13 @@ async function toggleAlarm(alarmId: string, enabled: boolean): Promise<void> {
   const electronAPI = (window as any).electronAPI as ElectronAPI | undefined;
   if (!electronAPI) return;
   const result = await electronAPI.updateAlarm(updatedAlarm);
-  if (!result.ok) { alert(result.error ?? 'Could not update the alarm.'); renderAlarms(); }
+  if (!result.ok) {
+    alert(result.error ?? 'Could not update the alarm.');
+    renderAlarms();
+    return;
+  }
+  alarms = alarms.map(item => item.id === alarmId ? { ...item, enabled } : item);
+  renderAlarms();
 }
 
 function playAlarmSound(sound: string = 'classic'): void {
@@ -641,14 +648,12 @@ document.addEventListener('DOMContentLoaded', () => {
       renderAlarms();
     });
 
-    // Update alarm countdowns every second
+    // Update only countdown labels so interactive alarm controls remain attached.
     if (timeUpdateInterval) {
       clearInterval(timeUpdateInterval);
     }
     timeUpdateInterval = setInterval(() => {
-      // If an alarm is being edited, update only its countdown
-      // Avoid a full rerender so focus is preserved
-      renderAlarms();
+      updateAlarmCountdowns();
     }, 1000);
 
     // Listen for triggered alarms
