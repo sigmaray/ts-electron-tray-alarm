@@ -22,7 +22,16 @@ export interface Alarm {
 export interface AppSettings {
   alarms: Alarm[];
   countdownWindowVisible: boolean;
+  countdownWindowPosition?: CountdownWindowPosition;
   timezone?: string | null;
+}
+
+export interface CountdownWindowPosition {
+  displayId: string;
+  displayLabel?: string;
+  displayBounds?: { x: number; y: number; width: number; height: number };
+  x: number;
+  y: number;
 }
 
 export interface SettingsPaths {
@@ -124,11 +133,41 @@ export function isValidAlarmPayload(value: unknown): value is Alarm {
 export function parseSettings(raw: unknown): AppSettings {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return defaultSettings();
   const value = raw as Record<string, unknown>;
+  const rawPosition = value.countdownWindowPosition;
+  const countdownWindowPosition = rawPosition && typeof rawPosition === 'object' && !Array.isArray(rawPosition)
+    ? rawPosition as Record<string, unknown>
+    : undefined;
+  const validCountdownPosition = countdownWindowPosition
+    && ((typeof countdownWindowPosition.displayId === 'number' && Number.isFinite(countdownWindowPosition.displayId))
+      || (typeof countdownWindowPosition.displayId === 'string' && countdownWindowPosition.displayId.length <= 64))
+    && Number.isSafeInteger(countdownWindowPosition.x)
+    && Number.isSafeInteger(countdownWindowPosition.y)
+    ? {
+      displayId: String(countdownWindowPosition.displayId),
+      ...(typeof countdownWindowPosition.displayLabel === 'string' && countdownWindowPosition.displayLabel.length <= 256
+        ? { displayLabel: countdownWindowPosition.displayLabel }
+        : {}),
+      ...(isDisplayBounds(countdownWindowPosition.displayBounds)
+        ? { displayBounds: countdownWindowPosition.displayBounds }
+        : {}),
+      x: countdownWindowPosition.x as number,
+      y: countdownWindowPosition.y as number,
+    }
+    : undefined;
   return {
     alarms: parseAlarms(value.alarms),
     countdownWindowVisible: value.countdownWindowVisible === true,
+    ...(validCountdownPosition ? { countdownWindowPosition: validCountdownPosition } : {}),
     timezone: normalizeTimeZone(value.timezone) ?? undefined,
   };
+}
+
+function isDisplayBounds(value: unknown): value is { x: number; y: number; width: number; height: number } {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const bounds = value as Record<string, unknown>;
+  return Number.isSafeInteger(bounds.x) && Number.isSafeInteger(bounds.y)
+    && Number.isSafeInteger(bounds.width) && Number.isSafeInteger(bounds.height)
+    && (bounds.width as number) > 0 && (bounds.height as number) > 0;
 }
 
 /** Resolve storage, migrate the former app-directory file, and fall back from read-only portable installs. */

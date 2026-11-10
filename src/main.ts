@@ -1,7 +1,7 @@
 import { app, BrowserWindow, Tray, Menu, nativeImage, dialog, screen, Notification } from 'electron';
 import * as path from 'path';
 import { createCanvas } from 'canvas';
-import { Alarm, createSettingsStore } from './settings';
+import { Alarm, CountdownWindowPosition, createSettingsStore } from './settings';
 import { registerIpcHandlers } from './ipc-handlers';
 import { scheduleAlarm } from './alarm-scheduling';
 import { localDateTimeInTimezone, nextAlarmTimestamp, zonedDateTimeToTimestamp } from './time.js';
@@ -54,10 +54,12 @@ function getEffectiveTimezone(): string {
 }
 
 let countdownWindowVisiblePref = false;
+let countdownWindowPosition: CountdownWindowPosition | undefined;
+let countdownPositionSaveTimer: NodeJS.Timeout | null = null;
 let timezonePref: string | null = null; // null means use the system time zone
 
 function saveSettings(): void {
-  settingsStore?.save({ alarms, countdownWindowVisible: countdownWindowVisiblePref, timezone: timezonePref });
+  settingsStore?.save({ alarms, countdownWindowVisible: countdownWindowVisiblePref, countdownWindowPosition, timezone: timezonePref });
 }
 
 // Save alarms and all other settings to disk
@@ -290,6 +292,61 @@ function updateCountdownWindow(): void {
   }
 }
 
+const COUNTDOWN_WINDOW_WIDTH = 280;
+const COUNTDOWN_WINDOW_HEIGHT = 70;
+
+function standardCountdownWindowPosition(display: Electron.Display = screen.getPrimaryDisplay()): CountdownWindowPosition {
+  const { x, y, width, height } = display.workArea;
+  return {
+    displayId: String(display.id),
+    displayLabel: display.label,
+    displayBounds: { ...display.bounds },
+    x: x + Math.max(0, width - COUNTDOWN_WINDOW_WIDTH),
+    y: y + Math.max(0, height - COUNTDOWN_WINDOW_HEIGHT),
+  };
+}
+
+function countdownPositionFits(position: CountdownWindowPosition, display: Electron.Display): boolean {
+  const area = display.workArea;
+  return position.x >= area.x && position.y >= area.y
+    && position.x + COUNTDOWN_WINDOW_WIDTH <= area.x + area.width
+    && position.y + COUNTDOWN_WINDOW_HEIGHT <= area.y + area.height;
+}
+
+function rememberCountdownWindowPosition(): void {
+  if (!countdownWindow || countdownWindow.isDestroyed()) return;
+  const bounds = countdownWindow.getBounds();
+  const display = screen.getDisplayMatching(bounds);
+  countdownWindowPosition = {
+    displayId: String(display.id),
+    displayLabel: display.label,
+    displayBounds: { ...display.bounds },
+    x: bounds.x,
+    y: bounds.y,
+  };
+}
+
+function saveCountdownWindowPositionNow(): void {
+  if (countdownPositionSaveTimer) clearTimeout(countdownPositionSaveTimer);
+  countdownPositionSaveTimer = null;
+  rememberCountdownWindowPosition();
+  console.info(`[countdown] Persisting position ${JSON.stringify(countdownWindowPosition)} to ${settingsStore?.getPath() ?? 'settings store unavailable'}`);
+  saveSettings();
+}
+
+function scheduleCountdownWindowPositionSave(): void {
+  if (countdownWindow && !countdownWindow.isDestroyed()) {
+    console.info(`[countdown] Window move/resize event at ${JSON.stringify(countdownWindow.getBounds())}`);
+  }
+  if (countdownPositionSaveTimer) clearTimeout(countdownPositionSaveTimer);
+  countdownPositionSaveTimer = setTimeout(() => {
+    countdownPositionSaveTimer = null;
+    rememberCountdownWindowPosition();
+    console.info(`[countdown] Persisting moved position ${JSON.stringify(countdownWindowPosition)} to ${settingsStore?.getPath() ?? 'settings store unavailable'}`);
+    saveSettings();
+  }, 250);
+}
+
 function createCountdownWindow(): void {
   if (countdownWindow && !countdownWindow.isDestroyed()) {
     countdownWindow.show();
@@ -300,20 +357,50 @@ function createCountdownWindow(): void {
     return;
   }
 
-  const primaryDisplay = screen.getPrimaryDisplay();
-  const { width: screenWidth, height: screenHeight } = primaryDisplay.workAreaSize;
-  const { x: screenX, y: screenY } = primaryDisplay.workArea;
-
-  const windowWidth = 280;
-  const windowHeight = 70;
-  const x = screenX + screenWidth - windowWidth;
-  const y = screenY + screenHeight - windowHeight;
+  const displays = screen.getAllDisplays();
+  const savedPosition = countdownWindowPosition;
+  console.info(`[countdown] Restore attempt from ${settingsStore?.getPath() ?? 'settings store unavailable'}: saved=${JSON.stringify(savedPosition)}, connected displays=${JSON.stringify(displays.map(display => ({ id: display.id, label: display.label, bounds: display.bounds, workArea: display.workArea })))}`);
+  let savedDisplay = savedPosition
+    ? displays.find(display => String(display.id) === savedPosition.displayId)
+    : undefined;
+  if (!savedDisplay && savedPosition?.displayLabel) {
+    const labelMatches = displays.filter(display => display.label === savedPosition.displayLabel);
+    if (labelMatches.length === 1) savedDisplay = labelMatches[0];
+  }
+  if (!savedDisplay && savedPosition?.displayBounds) {
+    const savedBounds = savedPosition.displayBounds;
+    const geometryMatches = displays.filter(display => display.bounds.x === savedBounds.x
+      && display.bounds.y === savedBounds.y
+      && display.bounds.width === savedBounds.width
+      && display.bounds.height === savedBounds.height);
+    if (geometryMatches.length === 1) savedDisplay = geometryMatches[0];
+  }
+  const candidate = savedPosition && savedDisplay
+    ? { ...savedPosition, displayId: String(savedDisplay.id), displayLabel: savedDisplay.label }
+    : undefined;
+  const canRestore = !!(candidate && savedDisplay && countdownPositionFits(candidate, savedDisplay));
+  const restoredPosition = canRestore && candidate
+    ? candidate
+    : standardCountdownWindowPosition();
+  const restoreReason = canRestore
+    ? 'saved monitor is connected and position fits its work area'
+    : !savedPosition
+      ? 'no saved position; using the standard primary-display position'
+      : !savedDisplay
+        ? 'saved monitor is unavailable; using the standard primary-display position'
+        : 'saved position does not fit the monitor work area; using the standard primary-display position';
+  console.info(`[countdown] Restore decision: ${restoreReason}; selected=${JSON.stringify(restoredPosition)}`);
+  const positionChanged = !countdownWindowPosition
+    || countdownWindowPosition.displayId !== restoredPosition.displayId
+    || countdownWindowPosition.x !== restoredPosition.x
+    || countdownWindowPosition.y !== restoredPosition.y;
+  countdownWindowPosition = restoredPosition;
 
   countdownWindow = new BrowserWindow({
-    width: windowWidth,
-    height: windowHeight,
-    x,
-    y,
+    width: COUNTDOWN_WINDOW_WIDTH,
+    height: COUNTDOWN_WINDOW_HEIGHT,
+    x: restoredPosition.x,
+    y: restoredPosition.y,
     frame: false,
     alwaysOnTop: true,
     transparent: true,
@@ -327,12 +414,30 @@ function createCountdownWindow(): void {
     },
   });
 
+  countdownWindow.on('move', scheduleCountdownWindowPositionSave);
+  countdownWindow.on('moved', scheduleCountdownWindowPositionSave);
+  countdownWindow.on('resize', scheduleCountdownWindowPositionSave);
+  if (positionChanged) saveSettings();
+
   countdownWindow.loadFile(path.join(__dirname, 'countdown.html'));
 
   countdownWindow.once('ready-to-show', () => {
     if (countdownWindow) {
       updateCountdownWindow();
       countdownWindow.show();
+      // Some window managers ignore constructor coordinates until the native window is shown.
+      countdownWindow.setPosition(restoredPosition.x, restoredPosition.y);
+      const requestedPosition = { x: restoredPosition.x, y: restoredPosition.y };
+      setTimeout(() => {
+        if (!countdownWindow || countdownWindow.isDestroyed()) return;
+        const actualBounds = countdownWindow.getBounds();
+        const applied = actualBounds.x === requestedPosition.x && actualBounds.y === requestedPosition.y;
+        console.info(`[countdown] Position restore ${applied ? 'applied' : 'not applied by window manager'}: requested=${JSON.stringify(requestedPosition)}, actual=${JSON.stringify(actualBounds)}`);
+        rememberCountdownWindowPosition();
+        console.info(`[countdown] Persisting post-show position ${JSON.stringify(countdownWindowPosition)} to ${settingsStore?.getPath() ?? 'settings store unavailable'}`);
+        saveSettings();
+      }, 150);
+      console.info(`[countdown] Window shown at ${JSON.stringify(countdownWindow.getBounds())}`);
       countdownWindowVisiblePref = true;
       saveSettings();
       sendCountdownWindowState();
@@ -347,6 +452,7 @@ function createCountdownWindow(): void {
 
 function destroyCountdownWindow(): void {
   if (countdownWindow) {
+    saveCountdownWindowPositionNow();
     countdownWindow.close();
     countdownWindow = null;
   }
@@ -684,6 +790,7 @@ function initializeApp(): void {
   // Load settings at startup
   const settings = store.load();
   countdownWindowVisiblePref = settings.countdownWindowVisible;
+  countdownWindowPosition = settings.countdownWindowPosition;
   timezonePref = settings.timezone ?? null;
   const now = Date.now();
   alarms = settings.alarms.map(alarm => scheduleAlarm(alarm, getEffectiveTimezone(), now));
@@ -696,6 +803,19 @@ function initializeApp(): void {
   if (countdownWindowVisiblePref) {
     createCountdownWindow();
   }
+
+  screen.on('display-removed', () => {
+    setTimeout(() => {
+      if (!countdownWindow || countdownWindow.isDestroyed()) return;
+      const bounds = countdownWindow.getBounds();
+      const display = screen.getDisplayMatching(bounds);
+      if (!countdownPositionFits({ displayId: String(display.id), x: bounds.x, y: bounds.y }, display)) {
+        const fallback = standardCountdownWindowPosition();
+        countdownWindow.setPosition(fallback.x, fallback.y);
+      }
+      saveCountdownWindowPositionNow();
+    }, 0);
+  });
 
   registerIpcHandlers({
     getAlarms: () => alarms,
@@ -789,6 +909,7 @@ app.on('window-all-closed', () => {
 });
 
 app.on('before-quit', () => {
+  if (countdownWindow && !countdownWindow.isDestroyed()) saveCountdownWindowPositionNow();
   app.isQuitting = true;
   stopAlarmChecker();
 });
