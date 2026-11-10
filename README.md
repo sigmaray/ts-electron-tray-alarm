@@ -55,7 +55,14 @@ npm run test:e2e
 
 The E2E suite launches the Electron application and may require a graphical display. CI runs it under a virtual display.
 
-The CI job runs `tests/e2e/native-tray.spec.ts` under Xvfb. Since Xvfb has no tray host, CI opens the app's native menu at a fixed position and checks its entries; tray actions are tested by the regular E2E suite. To test physical mouse clicks on the actual system tray icon in a Linux desktop session, set the screen coordinates for the tray icon and menu rows:
+The regular CI E2E job runs `tests/e2e/native-tray.spec.ts` under Xvfb and checks the native menu entries. A separate `native-tray` job builds `tests/native-tray/Dockerfile`, starts an Xfce status tray in Xvfb, and tests the icon and menu with real X11 mouse input. You can run the same tray-host test locally with Docker:
+
+```sh
+docker build -f tests/native-tray/Dockerfile -t alarm-native-tray-test .
+docker run --rm --shm-size=2g alarm-native-tray-test
+```
+
+To test physical mouse clicks in another Linux desktop session, set the screen coordinates for the tray icon and menu rows:
 
 ```sh
 export E2E_NATIVE_TRAY=1
@@ -63,10 +70,10 @@ export TRAY_ICON_X=... TRAY_ICON_Y=...
 export TRAY_MENU_NEW_ALARM_X=... TRAY_MENU_NEW_ALARM_Y=...
 export TRAY_MENU_MAIN_X=... TRAY_MENU_MAIN_Y=...
 export TRAY_MENU_COUNTDOWN_X=... TRAY_MENU_COUNTDOWN_Y=...
-npm run test:e2e -- --grep 'real X11 clicks'
+npm run test:e2e -- --grep 'native tray menu opens'
 ```
 
-This desktop mode uses real X11 mouse input to open the tray menu and select its entries. The coordinates depend on the desktop panel, display scale, and menu placement, so configure them for the dedicated desktop. The normal CI run exercises the native menu and its actions without a tray host.
+This desktop mode uses real X11 mouse input to open the tray menu and select its entries.
 
 ## Settings storage
 

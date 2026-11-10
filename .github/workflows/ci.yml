@@ -90,4 +90,17 @@ jobs:
         path: playwright-report/
         retention-days: 30
 
+  native-tray:
+    runs-on: ubuntu-24.04
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Build Xfce tray test image
+      run: docker build --file tests/native-tray/Dockerfile --tag alarm-native-tray-test .
+
+    - name: Run tray test with real X11 clicks
+      run: docker run --rm --shm-size=2g -e CI=true alarm-native-tray-test
+
 

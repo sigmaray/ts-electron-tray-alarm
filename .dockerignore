@@ -1,0 +1,10 @@
+.git
+.aws
+node_modules
+dist
+release
+playwright-report
+test-results
+coverage
+.env
+.env.*

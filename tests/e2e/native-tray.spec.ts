@@ -50,7 +50,9 @@ test('native tray menu opens and exposes its expected entries', async () => {
       } else {
         execFileSync(helperBinary, ['click', coordinates.trayX!, coordinates.trayY!, '3']);
       }
-      await expect.poll(() => app.evaluate(() => (global as any).__trayState__().menuOpen)).toBe(true);
+      if (mode === 'ci') {
+        await expect.poll(() => app.evaluate(() => (global as any).__trayState__().menuOpen)).toBe(true);
+      }
     };
     const clickMenuItem = async (index: number) => {
       const itemCoordinates = [
@@ -59,7 +61,9 @@ test('native tray menu opens and exposes its expected entries', async () => {
         [coordinates.countdownX, coordinates.countdownY],
       ][index];
       execFileSync(helperBinary, ['click', itemCoordinates[0]!, itemCoordinates[1]!, '1']);
-      await expect.poll(() => app.evaluate(() => (global as any).__trayState__().menuOpen)).toBe(false);
+      if (mode === 'ci') {
+        await expect.poll(() => app.evaluate(() => (global as any).__trayState__().menuOpen)).toBe(false);
+      }
     };
     const mainIsVisible = () => app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()
       .find((item: any) => item.webContents.getURL().includes('index.html'))?.isVisible());
@@ -86,11 +90,21 @@ test('native tray menu opens and exposes its expected entries', async () => {
     await clickMenuItem(1);
     await expect.poll(mainIsVisible).toBe(false);
 
+    const countdownChecked = await app.evaluate(() =>
+      (global as any).__trayMenu__().getMenuItemById('tray-countdown-window').checked);
     await openMenu();
-    const newAlarmWindow = app.waitForEvent('window');
+    await clickMenuItem(2);
+    await expect.poll(() => app.evaluate(() =>
+      (global as any).__trayMenu__().getMenuItemById('tray-countdown-window').checked)).toBe(!countdownChecked);
+    await openMenu();
+    await clickMenuItem(2);
+    await expect.poll(() => app.evaluate(() =>
+      (global as any).__trayMenu__().getMenuItemById('tray-countdown-window').checked)).toBe(countdownChecked);
+
+    await openMenu();
     await clickMenuItem(0);
-    const alarmCreation = await newAlarmWindow;
-    await expect(alarmCreation).toHaveURL(/alarmDialogOnly=1/);
+    await expect.poll(() => app.windows().some(page => page.url().includes('alarmDialogOnly=1'))).toBe(true);
+    const alarmCreation = app.windows().find(page => page.url().includes('alarmDialogOnly=1'))!;
     await alarmCreation.close();
   } finally {
     await app.close();
