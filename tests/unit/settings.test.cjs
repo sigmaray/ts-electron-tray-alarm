@@ -48,6 +48,26 @@ test('parseSettings validates countdown preferences, position, and font size', (
   assert.equal(parseSettings({ countdownFontSize: 'medium' }).countdownFontSize, 15);
 });
 
+test('parseSettings keeps valid color overrides and discards malformed hex values', () => {
+  const parsed = parseSettings({
+    trayIconColor: '#12AbEf',
+    countdownBackgroundColor: '#abcdef',
+    mainWindowBackgroundColor: '#F8F9FA',
+  });
+  assert.equal(parsed.trayIconColor, '#12abef');
+  assert.equal(parsed.countdownBackgroundColor, '#abcdef');
+  assert.equal(parsed.mainWindowBackgroundColor, '#f8f9fa');
+
+  const malformed = parseSettings({
+    trayIconColor: '#123',
+    countdownBackgroundColor: 'red',
+    mainWindowBackgroundColor: '#12345g',
+  });
+  assert.equal(malformed.trayIconColor, undefined);
+  assert.equal(malformed.countdownBackgroundColor, undefined);
+  assert.equal(malformed.mainWindowBackgroundColor, undefined);
+});
+
 test('parseAlarms replaces unsafe and duplicate IDs', () => {
   const alarms = parseAlarms([
     { id: 'safe-id', hour: 1, minute: 2, second: 3 },

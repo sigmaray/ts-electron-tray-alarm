@@ -512,6 +512,59 @@ test.describe('Alarm application', () => {
     await expect.poll(() => reopenedSettings.isClosed()).toBe(true);
   });
 
+  test('color settings keep HEX fields and color pickers synchronized and reject invalid HEX', async () => {
+    const settingsPromise = electronApp.waitForEvent('window');
+    await window.getByRole('button', { name: 'Settings' }).click();
+    const settingsWindow = await settingsPromise;
+    await settingsWindow.waitForLoadState('domcontentloaded');
+
+    const trayHex = settingsWindow.locator('#trayIconColorHex');
+    const trayPicker = settingsWindow.locator('#trayIconColor');
+    await trayHex.fill('#12abef');
+    await expect(trayPicker).toHaveValue('#12abef');
+
+    const countdownHex = settingsWindow.locator('#countdownBackgroundColorHex');
+    const countdownPicker = settingsWindow.locator('#countdownBackgroundColor');
+    await countdownPicker.evaluate((input: HTMLInputElement) => {
+      input.value = '#a1b2c3';
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await expect(countdownHex).toHaveValue('#a1b2c3');
+
+    const mainHex = settingsWindow.locator('#mainWindowBackgroundColorHex');
+    const colorBeforeInvalidSave = JSON.parse(fs.readFileSync(settingsPath, 'utf8')).trayIconColor;
+    await mainHex.fill('#12');
+    expect(await mainHex.evaluate((input: HTMLInputElement) => input.validity.valid)).toBe(false);
+    await settingsWindow.locator('#settingsApply').click();
+    await expect(mainHex).toBeFocused();
+    expect(JSON.parse(fs.readFileSync(settingsPath, 'utf8')).trayIconColor).toBe(colorBeforeInvalidSave);
+
+    await mainHex.fill('#334455');
+    await expect(settingsWindow.locator('#mainWindowBackgroundColor')).toHaveValue('#334455');
+    await settingsWindow.locator('#settingsApply').click();
+    await expect(settingsWindow.locator('#settingsStatus')).toHaveText('Settings applied.');
+    expect(JSON.parse(fs.readFileSync(settingsPath, 'utf8'))).toMatchObject({
+      trayIconColor: '#12abef',
+      countdownBackgroundColor: '#a1b2c3',
+      mainWindowBackgroundColor: '#334455',
+    });
+
+    await settingsWindow.locator('#settingsSave').click();
+    await expect.poll(() => settingsWindow.isClosed()).toBe(true);
+    const reopenedPromise = electronApp.waitForEvent('window');
+    await window.getByRole('button', { name: 'Settings' }).click();
+    const reopenedSettings = await reopenedPromise;
+    await reopenedSettings.waitForLoadState('domcontentloaded');
+    await expect(reopenedSettings.locator('#trayIconColorHex')).toHaveValue('#12abef');
+    await expect(reopenedSettings.locator('#countdownBackgroundColorHex')).toHaveValue('#a1b2c3');
+    await expect(reopenedSettings.locator('#mainWindowBackgroundColorHex')).toHaveValue('#334455');
+    await reopenedSettings.locator('#resetColors').click();
+    await reopenedSettings.locator('#settingsApply').click();
+    await expect(reopenedSettings.locator('#settingsStatus')).toHaveText('Settings applied.');
+    await reopenedSettings.locator('#settingsCancel').click();
+    await expect.poll(() => reopenedSettings.isClosed()).toBe(true);
+  });
+
   test('tray actions hide and restore the main window', async () => {
     await electronApp.evaluate(({ BrowserWindow }) => {
       const menu = (global as any).__trayMenu__();
