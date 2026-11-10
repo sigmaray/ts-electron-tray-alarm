@@ -27,8 +27,10 @@ let trayContextMenu: Menu | null = null;
 let trayMenuOpen = false;
 let lastTrayIconKey: string | null = null;
 let lastTrayTooltip: string | null = null;
+let lastTrayImageData: string | null = null;
 let trayImageUpdateCount = 0;
 let trayTooltipUpdateCount = 0;
+let systemNotificationShowCount = 0;
 
 // Control whether only one app instance may run
 const ALLOW_ONLY_ONE_INSTANCE = process.env.ALLOW_ONLY_ONE_INSTANCE !== 'false';
@@ -40,7 +42,11 @@ if (process.env.NODE_ENV === 'test' || process.env.ELECTRON_DISABLE_SANDBOX) {
   (global as any).__trayState__ = () => ({
     iconKey: lastTrayIconKey, tooltip: lastTrayTooltip,
     imageUpdates: trayImageUpdateCount, tooltipUpdates: trayTooltipUpdateCount,
-    alarmActive: isAlarmActive, blinking: isBlinking,
+    imageData: lastTrayImageData,
+    alarmActive: isAlarmActive, blinking: isBlinking, menuOpen: trayMenuOpen,
+  });
+  (global as any).__notificationState__ = () => ({
+    supported: Notification.isSupported(), showCount: systemNotificationShowCount,
   });
 }
 
@@ -359,8 +365,10 @@ function updateTrayIcon(): void {
   }
 
   if (iconKey !== lastTrayIconKey) {
-    tray.setImage(createTextIcon(iconText, iconIsBlinking));
+    const image = createTextIcon(iconText, iconIsBlinking);
+    tray.setImage(image);
     lastTrayIconKey = iconKey;
+    lastTrayImageData = image.toDataURL();
     trayImageUpdateCount++;
   }
   if (tooltipText !== lastTrayTooltip) {
@@ -771,6 +779,7 @@ function triggerAlarm(alarm: Alarm): void {
     });
     
     notification.on('click', () => { mainWindow?.show(); mainWindow?.focus(); });
+    if (process.env.NODE_ENV === 'test' || process.env.ELECTRON_DISABLE_SANDBOX) systemNotificationShowCount++;
     notification.show();
   } else if (notificationMode === 'system') {
     mainWindow?.show();

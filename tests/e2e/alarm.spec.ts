@@ -31,6 +31,7 @@ async function clearAlarms(page: Page): Promise<void> {
 async function addAlarm(page: Page, options: {
   hour?: string; minute: string; second?: string; frequency?: 'once' | 'daily' | 'hourly';
   date?: string; message?: string; withoutSound?: boolean;
+  notificationMode?: 'window' | 'system' | 'both'; sound?: 'classic' | 'digital' | 'gentle';
 }): Promise<void> {
   await page.locator('#addAlarmBtn').click();
   const dialog = page.locator('#alarmOptionsOverlay');
@@ -44,8 +45,13 @@ async function addAlarm(page: Page, options: {
     await page.getByRole('button', { name: 'Set date' }).click();
     await page.locator('#alarmOptionsDate').fill(options.date);
   }
+  if (options.notificationMode) {
+    const radioId = `#notification${options.notificationMode[0].toUpperCase()}${options.notificationMode.slice(1)}`;
+    await page.locator(radioId).check();
+  }
   if (options.message) await page.locator('#alarmOptionsMessage').fill(options.message);
   if (options.withoutSound) await page.locator('#alarmSoundEnabledNo').check();
+  if (options.sound) await page.locator('#alarmOptionsSound').selectOption(options.sound);
   await page.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(dialog).not.toHaveClass(/modal-overlay--visible/);
 }
@@ -131,6 +137,65 @@ test.describe('Alarm application', () => {
     await expect(soundRow.locator('.alarm-item__sound i')).toHaveClass(/fa-volume/);
   });
 
+  test('saves every notification mode and sound choice through the alarm form', async () => {
+    const cases = [
+      { hour: '09', minute: '11', mode: 'window', sound: 'classic' },
+      { hour: '09', minute: '12', mode: 'system', sound: 'digital' },
+      { hour: '09', minute: '13', mode: 'both', sound: 'gentle' },
+    ] as const;
+    for (const item of cases) {
+      await addAlarm(window, {
+        hour: item.hour, minute: item.minute, date: '2099-12-31',
+        notificationMode: item.mode, sound: item.sound,
+      });
+    }
+
+    for (const item of cases) {
+      const alarm = JSON.parse(fs.readFileSync(settingsPath, 'utf8')).alarms
+        .find((candidate: { hour: number; minute: number }) => candidate.hour === Number(item.hour) && candidate.minute === Number(item.minute));
+      expect(alarm).toMatchObject({ notificationMode: item.mode, sound: item.sound });
+      const row = window.locator(`.alarm-item[data-id="${alarm.id}"]`);
+      await row.getByRole('button', { name: 'Edit' }).click();
+      await expect(window.locator(`#notification${item.mode[0].toUpperCase()}${item.mode.slice(1)}`)).toBeChecked();
+      await expect(window.locator('#alarmOptionsSound')).toHaveValue(item.sound);
+      await window.getByRole('button', { name: 'Cancel' }).click();
+    }
+  });
+
+  test('system and combined notification modes follow platform support when alarms fire', async () => {
+    const supported = await electronApp.evaluate(() => (global as any).__notificationState__().supported);
+    for (const mode of ['system', 'both'] as const) {
+      const beforeCount = await electronApp.evaluate(() => (global as any).__notificationState__().showCount);
+      const target = Date.now() + 3000;
+      const targetTime = new Date(target);
+      const alarm = {
+        id: `notification-${mode}-e2e`, hour: targetTime.getHours(), minute: targetTime.getMinutes(),
+        second: targetTime.getSeconds(), enabled: true, recurring: false, frequency: 'once',
+        notificationMode: mode, sound: 'none', scheduledAt: target, message: `E2E ${mode} notification`,
+      };
+      const dialogPromise = mode === 'both' ? electronApp.waitForEvent('window') : null;
+      const added = await window.evaluate(async item => (window as any).electronAPI.addAlarm(item), alarm);
+      expect(added.ok).toBe(true);
+      const alarmDialog = dialogPromise ? await dialogPromise : null;
+      if (alarmDialog) {
+        await alarmDialog.waitForLoadState('domcontentloaded');
+        await expect(alarmDialog.locator('#alarmMessage')).toHaveText(`E2E ${mode} notification`, { timeout: 12000 });
+      }
+      await expect.poll(() => JSON.parse(fs.readFileSync(settingsPath, 'utf8')).alarms
+        .find((item: { id: string }) => item.id === alarm.id)?.completed).toBe(true);
+      if (supported) {
+        await expect.poll(() => electronApp.evaluate(() => (global as any).__notificationState__().showCount))
+          .toBeGreaterThan(beforeCount);
+      } else if (mode === 'system') {
+        await expect.poll(() => electronApp.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()
+          .find((item: any) => item.webContents.getURL().includes('index.html'))?.isVisible())).toBe(true);
+      }
+      if (alarmDialog) await alarmDialog.getByRole('button', { name: 'Dismiss' }).click();
+      else await window.evaluate(() => (window as any).electronAPI.dismissAlarm());
+      await expect.poll(() => electronApp.evaluate(() => (global as any).__trayState__().alarmActive)).toBe(false);
+    }
+  });
+
   test('groups alarm frequencies and orders hourly alarms by enabled state and minute', async () => {
     await addAlarm(window, { hour: '09', minute: '00', date: '2099-12-31' });
     await addAlarm(window, { hour: '10', minute: '15', frequency: 'daily' });
@@ -214,6 +279,10 @@ test.describe('Alarm application', () => {
     await expect.poll(() => electronApp.evaluate(() => (global as any).__trayState__().imageUpdates))
       .toBeGreaterThan(initialImageUpdates);
     await expect.poll(() => electronApp.evaluate(() => (global as any).__trayState__().blinking)).toBe(true);
+    const blinkingIcon = await electronApp.evaluate(() => (global as any).__trayState__().imageData);
+    await expect.poll(() => electronApp.evaluate(() => (global as any).__trayState__().blinking)).toBe(false);
+    await expect.poll(() => electronApp.evaluate(() => (global as any).__trayState__().imageData))
+      .not.toBe(blinkingIcon);
     const alarmId = new URL(alarmDialog.url()).searchParams.get('alarmId');
     expect(alarmId).toBeTruthy();
     await alarmDialog.getByRole('button', { name: 'Dismiss' }).click();
@@ -222,8 +291,10 @@ test.describe('Alarm application', () => {
       .find((alarm: { id: string }) => alarm.id === alarmId)?.completed).toBe(true);
     await expect.poll(() => electronApp.evaluate(() => (global as any).__trayState__().alarmActive)).toBe(false);
     const stableImageUpdates = await electronApp.evaluate(() => (global as any).__trayState__().imageUpdates);
+    const stableTooltipUpdates = await electronApp.evaluate(() => (global as any).__trayState__().tooltipUpdates);
     await new Promise(resolve => setTimeout(resolve, 1200));
     expect(await electronApp.evaluate(() => (global as any).__trayState__().imageUpdates)).toBe(stableImageUpdates);
+    expect(await electronApp.evaluate(() => (global as any).__trayState__().tooltipUpdates)).toBe(stableTooltipUpdates);
   });
 
   test('Postpone from a fired alarm schedules it again for the selected delay', async () => {
@@ -396,6 +467,23 @@ test.describe('Alarm application', () => {
     await window.getByRole('button', { name: 'Settings' }).click();
     const settingsWindow = await settingsPromise;
     await settingsWindow.waitForLoadState('domcontentloaded');
+    for (const format of ['compact', 'clock', 'seconds']) {
+      await settingsWindow.locator('#countdownFormat').selectOption(format);
+      await settingsWindow.locator('#settingsApply').click();
+      await expect(settingsWindow.locator('#settingsStatus')).toHaveText('Settings applied.');
+      expect(JSON.parse(fs.readFileSync(settingsPath, 'utf8')).countdownFormat).toBe(format);
+    }
+    for (const fontSize of ['8', '32']) {
+      await settingsWindow.locator('#countdownFontSize').selectOption(fontSize);
+      await settingsWindow.locator('#settingsApply').click();
+      await expect(settingsWindow.locator('#settingsStatus')).toHaveText('Settings applied.');
+      expect(JSON.parse(fs.readFileSync(settingsPath, 'utf8')).countdownFontSize).toBe(Number(fontSize));
+    }
+    await settingsWindow.locator('#settingsTimezone').selectOption('');
+    await settingsWindow.locator('#settingsApply').click();
+    await expect(settingsWindow.locator('#settingsStatus')).toHaveText('Settings applied.');
+    expect(JSON.parse(fs.readFileSync(settingsPath, 'utf8')).timezone).toBeNull();
+
     await settingsWindow.locator('#settingsTimezone').selectOption('Europe/Minsk');
     await settingsWindow.locator('#confirmQuit').uncheck();
     await settingsWindow.locator('#countdownFormat').selectOption('seconds');
@@ -425,12 +513,20 @@ test.describe('Alarm application', () => {
   });
 
   test('tray actions hide and restore the main window', async () => {
+    await electronApp.evaluate(({ BrowserWindow }) => {
+      const menu = (global as any).__trayMenu__();
+      const main = BrowserWindow.getAllWindows().find((item: any) => item.webContents.getURL().includes('index.html'));
+      menu.popup({ window: main });
+    });
+    await expect.poll(() => electronApp.evaluate(() => (global as any).__trayState__().menuOpen)).toBe(true);
     const menuLabels = await electronApp.evaluate(() => {
       const menu = (global as any).__trayMenu__();
       return menu.items.map((item: any) => item.label);
     });
     expect(menuLabels).toContain('New alarm');
     expect(menuLabels).toContain('Hide main window');
+    await electronApp.evaluate(() => (global as any).__trayMenu__().closePopup());
+    await expect.poll(() => electronApp.evaluate(() => (global as any).__trayState__().menuOpen)).toBe(false);
 
     await electronApp.evaluate(() => {
       const item = (global as any).__trayMenu__().getMenuItemById('tray-main-window');
@@ -457,6 +553,13 @@ test.describe('Alarm application', () => {
   });
 
   test('alarms and preferences survive an application restart', async () => {
+    await window.evaluate(async () => {
+      const api = (window as any).electronAPI;
+      await api.setTimezone('Europe/Minsk');
+      await api.saveAppPreferences({
+        confirmQuit: false, countdownFormat: 'seconds', countdownMenuButtonVisible: false, countdownFontSize: 20,
+      });
+    });
     await addAlarm(window, {
       hour: '08', minute: '45', date: '2099-12-31', message: 'Persist after restart', withoutSound: true,
     });
