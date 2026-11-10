@@ -21,7 +21,7 @@ let countdownWindow: BrowserWindow | null = null;
 let alarmDialogWindow: BrowserWindow | null = null;
 let alarmPreviewWindow: BrowserWindow | null = null;
 let alarmCreationWindow: BrowserWindow | null = null;
-let activeAlarmId: string | null = null;
+let activeAlarmDialogId: string | null = null;
 let tray: Tray | null = null;
 
 // Control whether only one app instance may run
@@ -618,9 +618,9 @@ function stopBlinking(): void {
   }
   isBlinking = false;
   isAlarmActive = false;
-  if (alarmDialogWindow && !alarmDialogWindow.isDestroyed()) alarmDialogWindow.close();
+  if (alarmDialogWindow && !alarmDialogWindow.isDestroyed()) alarmDialogWindow.destroy();
   alarmDialogWindow = null;
-  activeAlarmId = null;
+  activeAlarmDialogId = null;
   updateTrayIcon();
 }
 
@@ -678,15 +678,15 @@ function triggerAlarm(alarm: Alarm): void {
   isAlarmActive = true;
   startBlinking();
   
-  activeAlarmId = alarm.id;
   const notificationMode = alarm.notificationMode ?? 'window';
   if (notificationMode === 'window' || notificationMode === 'both') {
     const primaryDisplay = screen.getPrimaryDisplay();
     const dialogWidth = 430;
     const dialogHeight = 300;
     const { x: workAreaX, y: workAreaY, width: workAreaWidth, height: workAreaHeight } = primaryDisplay.workArea;
-    if (alarmDialogWindow && !alarmDialogWindow.isDestroyed()) alarmDialogWindow.close();
-    alarmDialogWindow = new BrowserWindow({
+    if (alarmDialogWindow && !alarmDialogWindow.isDestroyed()) alarmDialogWindow.destroy();
+    activeAlarmDialogId = alarm.id;
+    const dialogWindow = new BrowserWindow({
       width: dialogWidth, height: dialogHeight,
       x: workAreaX + Math.round((workAreaWidth - dialogWidth) / 2),
       y: workAreaY + Math.round((workAreaHeight - dialogHeight) / 2),
@@ -694,12 +694,18 @@ function triggerAlarm(alarm: Alarm): void {
       show: false, title: 'Alarm',
       webPreferences: { nodeIntegration: false, contextIsolation: true, preload: path.join(__dirname, 'preload.js') },
     });
-    alarmDialogWindow.loadFile(path.join(__dirname, 'alarm-dialog.html'), { query: {
+    alarmDialogWindow = dialogWindow;
+    dialogWindow.loadFile(path.join(__dirname, 'alarm-dialog.html'), { query: {
       alarmId: alarm.id, message: alarm.message?.trim() || `Time: ${String(alarm.hour).padStart(2, '0')}:${String(alarm.minute).padStart(2, '0')}`,
       postpone: '5',
     } });
-    alarmDialogWindow.once('ready-to-show', () => alarmDialogWindow?.show());
-    alarmDialogWindow.on('closed', () => { alarmDialogWindow = null; });
+    dialogWindow.once('ready-to-show', () => { if (!dialogWindow.isDestroyed()) dialogWindow.show(); });
+    dialogWindow.on('closed', () => {
+      if (alarmDialogWindow === dialogWindow) {
+        alarmDialogWindow = null;
+        activeAlarmDialogId = null;
+      }
+    });
   }
   if ((notificationMode === 'system' || notificationMode === 'both') && Notification.isSupported()) {
     const notification = new Notification({
@@ -1061,7 +1067,7 @@ function initializeApp(): void {
       }
     },
     postponeAlarm: (alarmId, minutes) => {
-      if (alarmId !== activeAlarmId || !Number.isInteger(minutes) || minutes < 1 || minutes > 60) return { ok: false, error: 'Invalid postpone request.' };
+      if (alarmId !== activeAlarmDialogId || !Number.isInteger(minutes) || minutes < 1 || minutes > 60) return { ok: false, error: 'Invalid postpone request.' };
       const alarm = alarms.find(item => item.id === alarmId);
       if (!alarm) return { ok: false, error: 'Alarm no longer exists.' };
       const scheduledAt = Date.now() + minutes * 60_000;
