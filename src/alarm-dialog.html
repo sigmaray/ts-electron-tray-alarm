@@ -5,10 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Alarm</title>
   <link rel="stylesheet" href="../node_modules/bootstrap/dist/css/bootstrap.min.css">
-  <style>body { cursor: pointer; user-select: none; } .alarm-dialog__actions { cursor: default; }</style>
+  <style>
+    body { cursor: pointer; user-select: none; overflow: hidden; }
+    .alarm-dialog__actions { cursor: default; }
+    #alarmMessage { overflow-wrap: anywhere; }
+  </style>
 </head>
 <body class="bg-danger-subtle">
-  <main class="container py-4 text-center">
+  <main class="container py-3 text-center">
     <h1 class="h3 text-danger">⏰ Alarm</h1>
     <p id="alarmMessage" class="fs-5"></p>
     <p id="previewLabel" class="text-body-secondary" hidden>Alarm preview</p>

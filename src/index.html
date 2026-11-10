@@ -87,8 +87,8 @@
     <main class="alarm-app container py-4">
         <p class="alarm-app__timezone text-secondary text-center" id="currentTimeTimezone">—</p>
 
-        <section class="quick-reminders card shadow mb-4">
-            <div class="card-header bg-primary text-white"><h2 class="h5 mb-0">Quick reminder</h2></div>
+        <section class="quick-reminders card shadow mb-6">
+            <div class="card-header bg-primary text-white"><h2 class="h5 mb-0">Set alarm</h2></div>
             <div class="card-body d-flex flex-wrap justify-content-center gap-2">
                 <button class="btn btn-outline-primary" data-reminder-seconds="5">in 5 seconds</button>
                 <button class="btn btn-outline-primary" data-reminder-seconds="10">in 10 seconds</button>
@@ -97,7 +97,7 @@
                 <button class="btn btn-outline-primary" data-reminder-seconds="120">in 2 minutes</button>
                 <button class="btn btn-outline-primary" data-reminder-seconds="300">in 5 minutes</button>
                 <button class="btn btn-outline-primary" data-reminder-seconds="600">in 10 minutes</button>
-                <button id="addAlarmBtn" class="btn btn-primary">Add alarm</button>
+                <button id="addAlarmBtn" class="btn btn-primary">Add custom alarm</button>
             </div>
         </section>
 
@@ -106,10 +106,10 @@
         <button id="dismissAlarmBtn" class="alarm-app__dismiss btn btn-danger mb-3" style="display: none;">Dismiss Alarm</button>
 
         <div class="app-controls d-flex flex-wrap justify-content-center gap-2 mt-3">
-            <button id="settingsBtn" class="btn btn-secondary">Settings</button>
-            <button id="countdownWindowBtn" class="btn btn-secondary">Show Countdown Window</button>
-            <button id="minimizeBtn" class="btn btn-secondary">Minimize to Tray</button>
-            <button id="closeBtn" class="app-controls__button--close btn btn-danger">Close</button>
+            <button id="settingsBtn" class="btn btn-secondary"><i class="fa-solid fa-gear" aria-hidden="true"></i> Settings</button>
+            <button id="countdownWindowBtn" class="btn btn-secondary"><i class="fa-regular fa-window-restore" aria-hidden="true"></i> <span>Show Countdown Window</span></button>
+            <button id="minimizeBtn" class="btn btn-secondary"><i class="fa-solid fa-arrow-down" aria-hidden="true"></i> Minimize to Tray</button>
+            <button id="closeBtn" class="app-controls__button--close btn btn-danger"><i class="fa-solid fa-x" aria-hidden="true"></i> Close permanently</button>
         </div>
 
         <div id="alarmOptionsOverlay" class="modal fade modal-overlay" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="alarmOptionsTitle">

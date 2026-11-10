@@ -31,6 +31,7 @@ interface ElectronAPI {
   onAlarmsUpdated: (callback: (alarms: Alarm[]) => void) => void;
   onAlarmTriggered: (callback: (alarmId: string) => void) => void;
   onAlarmDismissFromMain: (callback: () => void) => void;
+  onAlarmPreviewClosed: (callback: () => void) => void;
   removeAlarmsUpdatedListener: () => void;
   removeAlarmTriggeredListener: () => void;
   toggleCountdownWindow: () => void;
@@ -47,6 +48,7 @@ let audioInterval: NodeJS.Timeout | null = null;
 let isAlarmPlaying: boolean = false;
 let isAlarmTriggered = false;
 let soundTestInterval: ReturnType<typeof setInterval> | null = null;
+let previewAlarmSoundActive = false;
 let timeUpdateInterval: NodeJS.Timeout | null = null;
 let currentTimezoneInfo: { effective: string; isSystem: boolean } | null = null;
 let timeTimezoneInterval: ReturnType<typeof setTimeout> | null = null;
@@ -401,7 +403,7 @@ return `
   };
 
   if (alarms.length === 0) {
-    container.innerHTML = '<div class="alarm-list__empty card shadow mb-4 p-3 text-center text-secondary">No alarms set</div>';
+    container.innerHTML = '<div class="alarm-list__empty card shadow mb-6 p-3 text-center text-secondary">No alarms set</div>';
     return;
   }
 
@@ -416,7 +418,7 @@ return `
       group.frequency, sortTimeZone, sortNow,
     );
     if (groupAlarms.length === 0) return '';
-    return `<section class="alarm-list__group card shadow mb-4">
+    return `<section class="alarm-list__group card shadow mb-6">
       <div class="card-header bg-primary text-white"><h2 class="h5 mb-0">${group.title}</h2></div>
       <div class="list-group list-group-flush">${groupAlarms.map(renderAlarm).join('')}</div>
     </section>`;
@@ -632,7 +634,8 @@ document.addEventListener('DOMContentLoaded', () => {
     electronAPI.onCountdownWindowState((visible: boolean) => {
       const btn = document.getElementById('countdownWindowBtn') as HTMLButtonElement;
       if (btn) {
-        btn.textContent = visible ? 'Hide Countdown Window' : 'Show Countdown Window';
+        const label = btn.querySelector('span');
+        if (label) label.textContent = visible ? 'Hide Countdown Window' : 'Show Countdown Window';
       }
     });
 
@@ -677,6 +680,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Listen for triggered alarms
     electronAPI.onAlarmTriggered((alarmId) => {
+      if (previewAlarmSoundActive) {
+        if (soundTestInterval) clearTimeout(soundTestInterval);
+        soundTestInterval = null;
+        previewAlarmSoundActive = false;
+      }
       const alarm = alarms.find(a => a.id === alarmId);
       if (alarm) {
         ringingAlarmId = alarmId;
@@ -690,9 +698,18 @@ document.addEventListener('DOMContentLoaded', () => {
     // Listen for the main process closing a native notification
     electronAPI.onAlarmDismissFromMain(() => {
       stopAlarmSound();
+      previewAlarmSoundActive = false;
       isAlarmTriggered = false;
       ringingAlarmId = null;
       updateDismissButton();
+    });
+
+    electronAPI.onAlarmPreviewClosed(() => {
+      if (!previewAlarmSoundActive) return;
+      if (soundTestInterval) clearTimeout(soundTestInterval);
+      soundTestInterval = null;
+      previewAlarmSoundActive = false;
+      stopAlarmSound();
     });
   }
 
@@ -728,13 +745,24 @@ document.addEventListener('DOMContentLoaded', () => {
     button.disabled = true;
     try {
       const api = (window as any).electronAPI as ElectronAPI;
+      if (previewAlarmSoundActive) {
+        if (soundTestInterval) clearTimeout(soundTestInterval);
+        soundTestInterval = null;
+        previewAlarmSoundActive = false;
+        stopAlarmSound();
+      }
       const result = await api.previewAlarm({ notificationMode, message, sound, hour, minute, second });
       if (!result.ok) throw new Error(result.error || 'Could not preview the alarm.');
       if (sound !== 'none') {
         if (soundTestInterval) clearTimeout(soundTestInterval);
         stopAlarmSound();
         playAlarmSound(sound);
-        soundTestInterval = setTimeout(() => { soundTestInterval = null; stopAlarmSound(); }, 2500) as any;
+        previewAlarmSoundActive = true;
+        soundTestInterval = setTimeout(() => {
+          soundTestInterval = null;
+          previewAlarmSoundActive = false;
+          stopAlarmSound();
+        }, 2500) as any;
       }
     } catch (error) {
       alert(error instanceof Error ? error.message : 'Could not preview the alarm.');

@@ -733,7 +733,7 @@ function previewAlarm(options: { notificationMode: 'window' | 'system' | 'both';
     if (alarmPreviewWindow && !alarmPreviewWindow.isDestroyed()) alarmPreviewWindow.close();
     const display = screen.getPrimaryDisplay();
     const width = 430;
-    const height = 220;
+    const height = 300;
     alarmPreviewWindow = new BrowserWindow({
       width, height,
       x: display.workArea.x + Math.round((display.workArea.width - width) / 2),
@@ -744,7 +744,10 @@ function previewAlarm(options: { notificationMode: 'window' | 'system' | 'both';
     const previewWindow = alarmPreviewWindow;
     previewWindow.loadFile(path.join(__dirname, 'alarm-dialog.html'), { query: { message: body, preview: 'true' } });
     previewWindow.once('ready-to-show', () => previewWindow.show());
-    previewWindow.on('closed', () => { if (alarmPreviewWindow === previewWindow) alarmPreviewWindow = null; });
+    previewWindow.on('closed', () => {
+      if (alarmPreviewWindow === previewWindow) alarmPreviewWindow = null;
+      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('alarm-preview-closed');
+    });
     setTimeout(() => { if (!previewWindow.isDestroyed()) previewWindow.close(); }, 7000);
   }
   if ((options.notificationMode === 'system' || options.notificationMode === 'both') && Notification.isSupported()) {
