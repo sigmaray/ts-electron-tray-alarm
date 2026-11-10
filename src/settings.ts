@@ -12,7 +12,7 @@ export interface Alarm {
   frequency?: 'once' | 'daily' | 'hourly';
   notificationMode?: 'system' | 'window' | 'both';
   postponeMinutes?: number;
-  sound?: 'classic' | 'digital' | 'gentle';
+  sound?: 'classic' | 'digital' | 'gentle' | 'none';
   scheduledAt?: number;
   scheduledDate?: string;
   dateExplicit?: boolean;
@@ -79,7 +79,7 @@ function parseAlarm(raw: unknown): Alarm | null {
     ...(item.frequency === 'once' || item.frequency === 'daily' || item.frequency === 'hourly' ? { frequency: item.frequency } : {}),
     ...(item.notificationMode === 'system' || item.notificationMode === 'window' || item.notificationMode === 'both' ? { notificationMode: item.notificationMode } : {}),
     ...(Number.isInteger(item.postponeMinutes) && Number(item.postponeMinutes) >= 1 && Number(item.postponeMinutes) <= 60 ? { postponeMinutes: Number(item.postponeMinutes) } : {}),
-    ...(item.sound === 'classic' || item.sound === 'digital' || item.sound === 'gentle' ? { sound: item.sound } : {}),
+    ...(item.sound === 'classic' || item.sound === 'digital' || item.sound === 'gentle' || item.sound === 'none' ? { sound: item.sound } : {}),
     ...(scheduledAt === undefined ? {} : { scheduledAt }),
     ...(isValidDate(item.scheduledDate) ? { scheduledDate: item.scheduledDate as string } : {}),
     ...(typeof item.dateExplicit === 'boolean'
@@ -131,7 +131,7 @@ export function isValidAlarmPayload(value: unknown): value is Alarm {
     && (alarm.frequency === undefined || alarm.frequency === 'once' || alarm.frequency === 'daily' || alarm.frequency === 'hourly')
     && (alarm.notificationMode === undefined || alarm.notificationMode === 'system' || alarm.notificationMode === 'window' || alarm.notificationMode === 'both')
     && (alarm.postponeMinutes === undefined || (Number.isInteger(alarm.postponeMinutes) && (alarm.postponeMinutes as number) >= 1 && (alarm.postponeMinutes as number) <= 60))
-    && (alarm.sound === undefined || alarm.sound === 'classic' || alarm.sound === 'digital' || alarm.sound === 'gentle')
+    && (alarm.sound === undefined || alarm.sound === 'classic' || alarm.sound === 'digital' || alarm.sound === 'gentle' || alarm.sound === 'none')
     && (alarm.scheduledAt === undefined || (typeof alarm.scheduledAt === 'number' && Number.isFinite(alarm.scheduledAt) && Math.abs(alarm.scheduledAt) <= 8.64e15))
     && (alarm.scheduledDate === undefined || isValidDate(alarm.scheduledDate))
     && (alarm.dateExplicit === undefined || typeof alarm.dateExplicit === 'boolean')

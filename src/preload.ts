@@ -11,7 +11,7 @@ export interface Alarm {
   frequency?: 'once' | 'daily' | 'hourly';
   notificationMode?: 'system' | 'window' | 'both';
   postponeMinutes?: number;
-  sound?: 'classic' | 'digital' | 'gentle';
+  sound?: 'classic' | 'digital' | 'gentle' | 'none';
   scheduledAt?: number;
   scheduledDate?: string;
   dateExplicit?: boolean;

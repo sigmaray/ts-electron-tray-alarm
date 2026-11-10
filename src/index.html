@@ -138,8 +138,15 @@
                 </div>
                 <label class="alarm-options__label form-label" for="alarmOptionsMessage">Notification text (optional)</label>
                 <textarea id="alarmOptionsMessage" class="form-control" rows="3" maxlength="500" placeholder="Shown when the alarm goes off"></textarea>
-                <label class="form-label mt-3" for="alarmOptionsSound">Sound</label>
-                <div class="input-group mb-3"><select id="alarmOptionsSound" class="form-select"><option value="classic">Classic</option><option value="digital">Digital</option><option value="gentle">Gentle</option></select><button id="soundTestBtn" class="btn btn-outline-secondary" type="button">Test</button></div>
+                <fieldset class="mb-3">
+                    <legend class="fs-6">Alarm sound</legend>
+                    <div class="form-check"><input class="form-check-input" type="radio" name="alarmSoundEnabled" id="alarmSoundEnabledYes" value="yes" checked><label class="form-check-label" for="alarmSoundEnabledYes">With sound</label></div>
+                    <div class="form-check"><input class="form-check-input" type="radio" name="alarmSoundEnabled" id="alarmSoundEnabledNo" value="no"><label class="form-check-label" for="alarmSoundEnabledNo">Without sound</label></div>
+                </fieldset>
+                <div id="alarmSoundControls">
+                    <label class="form-label" for="alarmOptionsSound">Sound</label>
+                    <div class="input-group mb-3"><select id="alarmOptionsSound" class="form-select"><option value="classic">Classic</option><option value="digital">Digital</option><option value="gentle">Gentle</option></select><button id="soundTestBtn" class="btn btn-outline-secondary" type="button">Test</button></div>
+                </div>
                     </div>
                     <div class="modal-footer">
                         <button id="alarmOptionsCancelBtn" class="btn btn-secondary">Cancel</button>

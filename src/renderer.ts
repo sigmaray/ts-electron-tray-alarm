@@ -9,7 +9,7 @@ interface Alarm {
   frequency?: 'once' | 'daily' | 'hourly';
   notificationMode?: 'system' | 'window' | 'both';
   postponeMinutes?: number;
-  sound?: 'classic' | 'digital' | 'gentle';
+  sound?: 'classic' | 'digital' | 'gentle' | 'none';
   scheduledAt?: number;
   scheduledDate?: string;
   dateExplicit?: boolean;
@@ -101,6 +101,8 @@ function openAlarmOptions(alarmId?: string): void {
   const setDateButton = document.getElementById('setAlarmDateBtn') as HTMLButtonElement | null;
   const frequencyInputs = Array.from(document.querySelectorAll<HTMLInputElement>('input[name="alarmFrequency"]'));
   const soundInput = document.getElementById('alarmOptionsSound') as HTMLSelectElement | null;
+  const soundEnabledInputs = Array.from(document.querySelectorAll<HTMLInputElement>('input[name="alarmSoundEnabled"]'));
+  const soundControls = document.getElementById('alarmSoundControls');
   if (!overlay || !dateInput || !dateField || !dateControls || !setDateButton || !messageInput || !hourInput || !minuteInput || !secondInput) return;
   optionsAlarmId = alarmId ?? null;
   const tz = getEffectiveTimezoneForQuick();
@@ -118,7 +120,8 @@ function openAlarmOptions(alarmId?: string): void {
     dateField.hidden = !dateWasExplicit;
     setDateButton.hidden = dateWasExplicit;
     messageInput.value = alarm.message ?? '';
-    if (soundInput) soundInput.value = alarm.sound ?? 'classic';
+    if (soundInput) soundInput.value = alarm.sound === 'digital' || alarm.sound === 'gentle' ? alarm.sound : 'classic';
+    soundEnabledInputs.forEach(input => input.checked = input.value === (alarm.sound === 'none' ? 'no' : 'yes'));
     const mode = alarm.notificationMode ?? 'window';
     (document.getElementById(mode === 'system' ? 'notificationSystem' : mode === 'both' ? 'notificationBoth' : 'notificationWindow') as HTMLInputElement).checked = true;
     document.getElementById('alarmOptionsTitle')!.textContent = 'Edit alarm';
@@ -135,10 +138,24 @@ function openAlarmOptions(alarmId?: string): void {
     setDateButton.hidden = dateWasExplicit;
     messageInput.value = pendingNewAlarmMessage;
     if (soundInput) soundInput.value = 'classic';
+    soundEnabledInputs.forEach(input => input.checked = input.value === 'yes');
     (document.getElementById('notificationWindow') as HTMLInputElement).checked = true;
     document.getElementById('alarmOptionsTitle')!.textContent = 'Add alarm';
   }
   const updateHourlyLabel = () => { document.getElementById('hourlyMinuteLabel')!.textContent = minuteInput.value.padStart(2, '0'); };
+  const updateSoundControls = () => {
+    const soundEnabled = soundEnabledInputs.find(input => input.checked)?.value !== 'no';
+    if (soundControls) soundControls.hidden = !soundEnabled;
+    if (!soundEnabled && soundTestInterval) {
+      clearTimeout(soundTestInterval);
+      soundTestInterval = null;
+      stopAlarmSound();
+      const testButton = document.getElementById('soundTestBtn');
+      if (testButton) testButton.textContent = 'Test';
+    }
+  };
+  soundEnabledInputs.forEach(input => input.onchange = updateSoundControls);
+  updateSoundControls();
   minuteInput.oninput = updateHourlyLabel;
   updateHourlyLabel();
   const updateFrequencyFields = () => {
@@ -190,7 +207,10 @@ async function saveAlarmOptions(): Promise<void> {
   const secondInput = document.getElementById('alarmOptionsSecond') as HTMLInputElement | null;
   const frequency = document.querySelector<HTMLInputElement>('input[name="alarmFrequency"]:checked')?.value as 'once' | 'daily' | 'hourly' | undefined;
   const notificationMode = document.querySelector<HTMLInputElement>('input[name="notificationMode"]:checked')?.value as 'system' | 'window' | 'both' | undefined;
-  const sound = (document.getElementById('alarmOptionsSound') as HTMLSelectElement).value as Alarm['sound'];
+  const soundEnabled = document.querySelector<HTMLInputElement>('input[name="alarmSoundEnabled"]:checked')?.value !== 'no';
+  const sound = soundEnabled
+    ? (document.getElementById('alarmOptionsSound') as HTMLSelectElement).value as Alarm['sound']
+    : 'none';
   if (!overlay || !dateInput || !messageInput || !hourInput || !minuteInput || !secondInput || !frequency || !notificationMode) return;
   const date = frequency === 'once' ? dateInput.value || undefined : undefined;
   const message = messageInput.value.trim() || undefined;
@@ -589,7 +609,7 @@ document.addEventListener('DOMContentLoaded', () => {
         ringingAlarmId = alarmId;
         isAlarmTriggered = true;
         // Play the alarm sound
-        playAlarmSound(alarm.sound ?? 'classic');
+        if (alarm.sound !== 'none') playAlarmSound(alarm.sound ?? 'classic');
         updateDismissButton();
       }
     });
