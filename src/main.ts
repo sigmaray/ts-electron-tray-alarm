@@ -27,6 +27,8 @@ let trayContextMenu: Menu | null = null;
 let trayMenuOpen = false;
 let lastTrayIconKey: string | null = null;
 let lastTrayTooltip: string | null = null;
+let trayImageUpdateCount = 0;
+let trayTooltipUpdateCount = 0;
 
 // Control whether only one app instance may run
 const ALLOW_ONLY_ONE_INSTANCE = process.env.ALLOW_ONLY_ONE_INSTANCE !== 'false';
@@ -34,6 +36,12 @@ const ALLOW_ONLY_ONE_INSTANCE = process.env.ALLOW_ONLY_ONE_INSTANCE !== 'false';
 // Expose the tray for tests in development mode
 if (process.env.NODE_ENV === 'test' || process.env.ELECTRON_DISABLE_SANDBOX) {
   (global as any).__tray__ = () => tray;
+  (global as any).__trayMenu__ = () => trayContextMenu;
+  (global as any).__trayState__ = () => ({
+    iconKey: lastTrayIconKey, tooltip: lastTrayTooltip,
+    imageUpdates: trayImageUpdateCount, tooltipUpdates: trayTooltipUpdateCount,
+    alarmActive: isAlarmActive, blinking: isBlinking,
+  });
 }
 
 // Alarm type
@@ -353,10 +361,12 @@ function updateTrayIcon(): void {
   if (iconKey !== lastTrayIconKey) {
     tray.setImage(createTextIcon(iconText, iconIsBlinking));
     lastTrayIconKey = iconKey;
+    trayImageUpdateCount++;
   }
   if (tooltipText !== lastTrayTooltip) {
     tray.setToolTip(tooltipText);
     lastTrayTooltip = tooltipText;
+    trayTooltipUpdateCount++;
   }
 }
 
