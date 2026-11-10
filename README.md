@@ -5,10 +5,12 @@ A desktop alarm clock built with Electron. Alarms continue running while the app
 ## Features
 
 - Create, edit, enable, disable, and delete alarms.
-- Set alarms quickly for a time from 30 seconds to 2 hours ahead.
-- Configure recurring alarms.
+- Create alarms from a dialog or with quick reminders, then choose a one-time, daily, or hourly schedule.
+- Choose a system notification or an always-on-top alarm window, with postpone controls.
+- Choose from built-in alarm sounds and test them before saving.
 - Choose a time zone independently of the system time zone.
 - Show a floating countdown window and the next alarm countdown in the tray.
+- Show each alarm's date, weekday, and relative day.
 - Save alarms and preferences between launches.
 
 ## Development

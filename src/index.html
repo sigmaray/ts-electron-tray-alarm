@@ -12,11 +12,6 @@
         .alarm-app {
             max-width: 640px;
         }
-        .alarm-form__time-input {
-            flex: 0 0 5.5rem !important;
-            text-align: center;
-            font-variant-numeric: tabular-nums;
-        }
         .alarm-item__time-value {
             font-variant-numeric: tabular-nums;
         }
@@ -59,34 +54,16 @@
         <h1 class="display-5 fw-bold text-primary text-center">⏰ Alarm Clock</h1>
         <p class="alarm-app__timezone text-secondary text-center" id="currentTimeTimezone">—</p>
 
-        <section class="alarm-form card shadow mb-4">
-            <div class="card-header bg-primary text-white">
-                <h2 class="alarm-form__title h5 mb-0">Add Alarm</h2>
-            </div>
-            <div class="card-body">
-            <div class="alarm-form__time input-group input-group-lg justify-content-center mb-3">
-                <input type="number" id="newHour" class="alarm-form__time-input form-control" min="0" max="23" value="00" placeholder="00">
-                <span class="alarm-form__separator input-group-text">:</span>
-                <input type="number" id="newMinute" class="alarm-form__time-input form-control" min="0" max="59" value="00" placeholder="00">
-                <span class="alarm-form__separator input-group-text">:</span>
-                <input type="number" id="newSecond" class="alarm-form__time-input form-control" min="0" max="59" value="00" placeholder="00">
-            </div>
-            <div class="quick-time d-flex flex-wrap justify-content-center gap-2 mb-3">
-                <a href="#" class="quick-time__link btn btn-sm btn-outline-primary" onclick="setQuickTimeSeconds(30); return false;">in 30 seconds</a>
-                <a href="#" class="quick-time__link btn btn-sm btn-outline-primary" onclick="setQuickTimeSeconds(60); return false;">in 1 minute</a>
-                <a href="#" class="quick-time__link btn btn-sm btn-outline-primary" onclick="setQuickTime(2); return false;">in 2 minutes</a>
-                <a href="#" class="quick-time__link btn btn-sm btn-outline-primary" onclick="setQuickTime(30); return false;">in 30 minutes</a>
-                <a href="#" class="quick-time__link btn btn-sm btn-outline-primary" onclick="setQuickTime(60); return false;">in 1 hour</a>
-                <a href="#" class="quick-time__link btn btn-sm btn-outline-primary" onclick="setQuickTime(120); return false;">in 2 hours</a>
-            </div>
-            <div class="alarm-form__recurring form-check form-switch d-flex justify-content-center gap-2 mb-3">
-                <input type="checkbox" id="newRecurring" class="form-check-input">
-                <label class="form-check-label" for="newRecurring">Repeat daily</label>
-            </div>
-            <div class="alarm-actions alarm-actions--centered d-flex justify-content-center gap-2">
-                <button id="addAlarmBtn" class="alarm-actions__submit btn btn-primary">Add Alarm</button>
-                <button id="newAlarmOptionsBtn" class="alarm-actions__options btn btn-outline-secondary" aria-label="More alarm options" title="More options">...</button>
-            </div>
+        <section class="quick-reminders card shadow mb-4">
+            <div class="card-header bg-primary text-white"><h2 class="h5 mb-0">Quick reminder</h2></div>
+            <div class="card-body d-flex flex-wrap justify-content-center gap-2">
+                <button class="btn btn-outline-primary" data-reminder-seconds="10">in 10 seconds</button>
+                <button class="btn btn-outline-primary" data-reminder-seconds="30">in 30 seconds</button>
+                <button class="btn btn-outline-primary" data-reminder-seconds="60">in 1 minute</button>
+                <button class="btn btn-outline-primary" data-reminder-seconds="120">in 2 minutes</button>
+                <button class="btn btn-outline-primary" data-reminder-seconds="300">in 5 minutes</button>
+                <button class="btn btn-outline-primary" data-reminder-seconds="600">in 10 minutes</button>
+                <button id="addAlarmBtn" class="btn btn-primary">Add alarm</button>
             </div>
         </section>
 
@@ -101,7 +78,7 @@
             </div>
         </section>
 
-        <button id="dismissAlarmBtn" class="alarm-app__dismiss btn btn-danger" style="display: none;">Dismiss Alarm</button>
+        <button id="dismissAlarmBtn" class="alarm-app__dismiss btn btn-danger mb-3" style="display: none;">Dismiss Alarm</button>
 
         <div class="app-controls d-flex flex-wrap justify-content-center gap-2 mt-3">
             <button id="timezoneBtn" class="btn btn-secondary">Set Time Zone</button>
@@ -133,16 +110,16 @@
             <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
                 <div class="modal-content alarm-options">
                     <div class="modal-header">
-                        <h2 class="modal-title fs-5" id="alarmOptionsTitle">Alarm options</h2>
+                        <h2 class="modal-title fs-5" id="alarmOptionsTitle">Add alarm</h2>
                     </div>
                     <div class="modal-body">
                 <label class="alarm-options__label form-label" for="alarmOptionsHour">Time</label>
                 <div class="alarm-options__time input-group mb-3">
-                    <input type="number" id="alarmOptionsHour" class="alarm-options__time-input form-control" min="0" max="23" aria-label="Hour">
+                    <span id="alarmOptionsHourGroup" class="input-group-text p-0 border-0 bg-transparent"><input type="number" id="alarmOptionsHour" class="alarm-options__time-input form-control" min="0" max="23" aria-label="Hour"></span>
                     <span class="alarm-options__separator input-group-text">:</span>
                     <input type="number" id="alarmOptionsMinute" class="alarm-options__time-input form-control" min="0" max="59" aria-label="Minute">
                     <span class="alarm-options__separator input-group-text">:</span>
-                    <input type="number" id="alarmOptionsSecond" class="alarm-options__time-input form-control" min="0" max="59" aria-label="Second">
+                    <span id="alarmOptionsSecondGroup" class="input-group-text p-0 border-0 bg-transparent"><input type="number" id="alarmOptionsSecond" class="alarm-options__time-input form-control" min="0" max="59" aria-label="Second"></span>
                 </div>
                 <div class="quick-time d-flex flex-wrap justify-content-center gap-2 mb-3">
                     <a href="#" class="quick-time__link btn btn-sm btn-outline-secondary" data-options-seconds="30">in 30 seconds</a>
@@ -153,14 +130,24 @@
                     <a href="#" class="quick-time__link btn btn-sm btn-outline-secondary" data-options-minutes="60">in 1 hour</a>
                     <a href="#" class="quick-time__link btn btn-sm btn-outline-secondary" data-options-minutes="120">in 2 hours</a>
                 </div>
-                <div class="alarm-options__recurring form-check form-switch mb-3">
-                    <input type="checkbox" id="alarmOptionsRecurring" class="form-check-input">
-                    <label class="form-check-label" for="alarmOptionsRecurring">Repeat daily</label>
+                <fieldset class="mb-3">
+                    <legend class="fs-6">Alarm type</legend>
+                    <div class="form-check"><input class="form-check-input" type="radio" name="alarmFrequency" id="alarmFrequencyOnce" value="once" checked><label class="form-check-label" for="alarmFrequencyOnce">Once</label></div>
+                    <div class="form-check"><input class="form-check-input" type="radio" name="alarmFrequency" id="alarmFrequencyDaily" value="daily"><label class="form-check-label" for="alarmFrequencyDaily">Every day</label></div>
+                    <div class="form-check"><input class="form-check-input" type="radio" name="alarmFrequency" id="alarmFrequencyHourly" value="hourly"><label class="form-check-label" for="alarmFrequencyHourly">Every hour, at minute <span id="hourlyMinuteLabel">00</span></label></div>
+                </fieldset>
+                <div class="alarm-options__notification mb-3">
+                    <span class="form-label d-block">When the alarm rings</span>
+                    <div class="form-check"><input class="form-check-input" type="radio" name="notificationMode" id="notificationWindow" value="window" checked><label class="form-check-label" for="notificationWindow">Always-on-top app window</label></div>
+                    <div class="form-check"><input class="form-check-input" type="radio" name="notificationMode" id="notificationSystem" value="system"><label class="form-check-label" for="notificationSystem">System notification</label></div>
+                    <div class="form-check"><input class="form-check-input" type="radio" name="notificationMode" id="notificationBoth" value="both"><label class="form-check-label" for="notificationBoth">Both</label></div>
                 </div>
                 <label class="alarm-options__label form-label" for="alarmOptionsDate">Date (optional)</label>
                 <input type="date" id="alarmOptionsDate" class="form-control mb-3">
                 <label class="alarm-options__label form-label" for="alarmOptionsMessage">Notification text (optional)</label>
                 <textarea id="alarmOptionsMessage" class="form-control" rows="3" maxlength="500" placeholder="Shown when the alarm goes off"></textarea>
+                <label class="form-label mt-3" for="alarmOptionsSound">Sound</label>
+                <div class="input-group mb-3"><select id="alarmOptionsSound" class="form-select"><option value="classic">Classic</option><option value="digital">Digital</option><option value="gentle">Gentle</option></select><button id="soundTestBtn" class="btn btn-outline-secondary" type="button">Test</button></div>
                     </div>
                     <div class="modal-footer">
                         <button id="alarmOptionsCancelBtn" class="btn btn-secondary">Cancel</button>
@@ -173,9 +160,10 @@
         <div class="app-info alert alert-info mt-4" role="note">
             <p class="app-info__paragraph"><strong>Instructions:</strong></p>
             <p class="app-info__paragraph">• Set the time in 24-hour format (00:00:00–23:59:59)</p>
-            <p class="app-info__paragraph">• Add as many alarms as you need</p>
+            <p class="app-info__paragraph">• Choose one-time, daily, or hourly alarms</p>
             <p class="app-info__paragraph">• Use the toggle to enable or disable an alarm</p>
-            <p class="app-info__paragraph">• Select "Edit" to change an alarm time</p>
+            <p class="app-info__paragraph">• Select "Edit" to change alarm settings</p>
+            <p class="app-info__paragraph">• Choose a system notification or an always-on-top alarm window</p>
             <p class="app-info__paragraph">• The system tray shows the time remaining until the next alarm</p>
             <p class="app-info__paragraph">• Minimize the app to the system tray to keep alarms running</p>
         </div>

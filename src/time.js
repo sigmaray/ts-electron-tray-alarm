@@ -86,6 +86,10 @@
   function nextAlarmTimestamp(timeZone, alarm, nowTimestamp) {
     if (Number.isFinite(alarm.scheduledAt)) return alarm.scheduledAt;
     const local = localDateTimeInTimezone(timeZone, nowTimestamp);
+    if ((alarm.frequency === 'hourly') || (alarm.recurring && alarm.frequency === 'hourly')) {
+      const thisHour = zonedDateTimeToTimestamp(timeZone, { ...local, minute: alarm.minute, second: alarm.second });
+      return thisHour > nowTimestamp ? thisHour : thisHour + 60 * 60 * 1000;
+    }
     let target = { ...local, hour: alarm.hour, minute: alarm.minute, second: alarm.second };
     let timestamp = zonedDateTimeToTimestamp(timeZone, target);
     if (timestamp <= nowTimestamp) {

@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Alarm</title>
+  <link rel="stylesheet" href="../node_modules/bootstrap/dist/css/bootstrap.min.css">
+  <style>body { cursor: pointer; user-select: none; } .alarm-dialog__actions { cursor: default; }</style>
+</head>
+<body class="bg-danger-subtle">
+  <main class="container py-4 text-center">
+    <h1 class="h3 text-danger">⏰ Alarm</h1>
+    <p id="alarmMessage" class="fs-5"></p>
+    <div class="alarm-dialog__actions d-flex justify-content-center align-items-center gap-2 mt-4">
+      <select id="postponeSelect" class="form-select w-auto" aria-label="Postpone duration">
+        <option value="1">1 minute</option><option value="2">2 minutes</option><option value="5">5 minutes</option>
+        <option value="10">10 minutes</option><option value="15">15 minutes</option><option value="30">30 minutes</option>
+      </select>
+      <button id="postponeButton" class="btn btn-warning">Postpone</button>
+      <button id="dismissButton" class="btn btn-danger">Dismiss</button>
+    </div>
+  </main>
+  <script>
+    const params = new URLSearchParams(location.search);
+    const alarmId = params.get('alarmId') || '';
+    document.getElementById('alarmMessage').textContent = params.get('message') || 'Time to wake up.';
+    document.getElementById('postponeSelect').value = params.get('postpone') || '5';
+    document.getElementById('postponeButton').addEventListener('click', async event => {
+      event.stopPropagation();
+      const result = await window.electronAPI.postponeAlarm(alarmId, Number(document.getElementById('postponeSelect').value));
+      if (!result.ok) document.getElementById('alarmMessage').textContent = result.error || 'Could not postpone the alarm.';
+    });
+    document.getElementById('dismissButton').addEventListener('click', event => {
+      event.stopPropagation();
+      window.electronAPI.dismissAlarm();
+    });
+  </script>
+</body>
+</html>

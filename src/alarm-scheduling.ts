@@ -15,6 +15,11 @@ function timestampForAlarmDate(alarm: Alarm, timeZone: string): number | undefin
 }
 
 export function hasDuplicateAlarm(existing: Alarm, candidate: Alarm): boolean {
+  const existingFrequency = existing.frequency ?? (existing.recurring ? 'daily' : 'once');
+  const candidateFrequency = candidate.frequency ?? (candidate.recurring ? 'daily' : 'once');
+  if (existingFrequency === 'hourly' || candidateFrequency === 'hourly') {
+    return existingFrequency === candidateFrequency && existing.minute === candidate.minute && existing.second === candidate.second;
+  }
   if (existing.hour !== candidate.hour || existing.minute !== candidate.minute || existing.second !== candidate.second) return false;
 
   const bothDateBoundOneShots = !existing.recurring && !candidate.recurring
@@ -32,6 +37,13 @@ export function scheduleAlarm(alarm: Alarm, timeZone: string, now: number = Date
   const scheduled = { ...alarm };
   if (!scheduled.enabled) {
     delete scheduled.scheduledAt;
+    return scheduled;
+  }
+
+  if (scheduled.frequency === 'hourly') {
+    scheduled.scheduledAt = nextAlarmTimestamp(timeZone, { ...scheduled, scheduledAt: undefined }, now);
+    scheduled.scheduledDate = dateFromTimestamp(timeZone, scheduled.scheduledAt);
+    delete scheduled.completed;
     return scheduled;
   }
 
@@ -67,6 +79,11 @@ export function scheduleAlarm(alarm: Alarm, timeZone: string, now: number = Date
 export function rescheduleAlarmsForTimezone(alarms: Alarm[], timeZone: string, now: number = Date.now()): Alarm[] {
   return alarms.map(alarm => {
     if (!alarm.enabled) return alarm;
+
+    if (alarm.frequency === 'hourly') {
+      const next = nextAlarmTimestamp(timeZone, { ...alarm, scheduledAt: undefined }, now);
+      return { ...alarm, scheduledAt: next, scheduledDate: dateFromTimestamp(timeZone, next) };
+    }
 
     if (alarm.scheduledDate) {
       const target = timestampForAlarmDate(alarm, timeZone)!;

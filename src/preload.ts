@@ -8,6 +8,10 @@ export interface Alarm {
   second: number;
   enabled: boolean;
   recurring: boolean;
+  frequency?: 'once' | 'daily' | 'hourly';
+  notificationMode?: 'system' | 'window' | 'both';
+  postponeMinutes?: number;
+  sound?: 'classic' | 'digital' | 'gentle';
   scheduledAt?: number;
   scheduledDate?: string;
   message?: string;
@@ -40,6 +44,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   dismissAlarm: () => {
     ipcRenderer.send('alarm-dismiss');
   },
+  postponeAlarm: (alarmId: string, minutes: number) => ipcRenderer.invoke('alarm-postpone', alarmId, minutes) as Promise<AlarmOperationResult>,
   // Event listeners for messages from the main process
   onAlarmsUpdated: (callback: (alarms: Alarm[]) => void) => {
     ipcRenderer.on('alarms-updated', (_event, alarms) => callback(alarms));

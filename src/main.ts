@@ -17,6 +17,8 @@ declare global {
 
 let mainWindow: BrowserWindow | null = null;
 let countdownWindow: BrowserWindow | null = null;
+let alarmDialogWindow: BrowserWindow | null = null;
+let activeAlarmId: string | null = null;
 let tray: Tray | null = null;
 
 // Control whether only one app instance may run
@@ -385,6 +387,9 @@ function stopBlinking(): void {
   }
   isBlinking = false;
   isAlarmActive = false;
+  if (alarmDialogWindow && !alarmDialogWindow.isDestroyed()) alarmDialogWindow.close();
+  alarmDialogWindow = null;
+  activeAlarmId = null;
   updateTrayIcon();
 }
 
@@ -404,7 +409,8 @@ function checkAlarms(): void {
     if (!alarm.enabled) continue;
 
     // For recurring alarms, check whether this alarm has already fired today
-    if (alarm.recurring && triggeredAlarmsToday.has(alarm.id)) continue;
+    const frequency = alarm.frequency ?? (alarm.recurring ? 'daily' : 'once');
+    if (frequency === 'daily' && triggeredAlarmsToday.has(alarm.id)) continue;
 
     const fireTs = alarm.scheduledAt ?? getAlarmTimestampOnCalendarDay(alarm, tz, local.year, local.month, local.day);
     // Fire if the target time has passed, even after an event loop delay or system sleep
@@ -412,8 +418,8 @@ function checkAlarms(): void {
 
     triggerAlarm(alarm);
 
-    if (alarm.recurring) {
-      triggeredAlarmsToday.add(alarm.id);
+    if (frequency !== 'once') {
+      if (frequency === 'daily') triggeredAlarmsToday.add(alarm.id);
       alarm.scheduledAt = nextAlarmTimestamp(tz, { ...alarm, scheduledAt: undefined }, nowMs);
       const nextLocal = localDateTimeInTimezone(tz, alarm.scheduledAt);
       alarm.scheduledDate = `${nextLocal.year}-${String(nextLocal.month).padStart(2, '0')}-${String(nextLocal.day).padStart(2, '0')}`;
@@ -441,39 +447,41 @@ function triggerAlarm(alarm: Alarm): void {
   isAlarmActive = true;
   startBlinking();
   
-  // Show a notification
-  if (Notification.isSupported()) {
+  activeAlarmId = alarm.id;
+  const notificationMode = alarm.notificationMode ?? 'window';
+  if (notificationMode === 'window' || notificationMode === 'both') {
+    const primaryDisplay = screen.getPrimaryDisplay();
+    const dialogWidth = 430;
+    const dialogHeight = 300;
+    const { x: workAreaX, y: workAreaY, width: workAreaWidth, height: workAreaHeight } = primaryDisplay.workArea;
+    if (alarmDialogWindow && !alarmDialogWindow.isDestroyed()) alarmDialogWindow.close();
+    alarmDialogWindow = new BrowserWindow({
+      width: dialogWidth, height: dialogHeight,
+      x: workAreaX + Math.round((workAreaWidth - dialogWidth) / 2),
+      y: workAreaY + Math.round((workAreaHeight - dialogHeight) / 2),
+      alwaysOnTop: true, resizable: false, closable: false,
+      show: false, title: 'Alarm',
+      webPreferences: { nodeIntegration: false, contextIsolation: true, preload: path.join(__dirname, 'preload.js') },
+    });
+    alarmDialogWindow.loadFile(path.join(__dirname, 'alarm-dialog.html'), { query: {
+      alarmId: alarm.id, message: alarm.message?.trim() || `Time: ${String(alarm.hour).padStart(2, '0')}:${String(alarm.minute).padStart(2, '0')}`,
+      postpone: '5',
+    } });
+    alarmDialogWindow.once('ready-to-show', () => alarmDialogWindow?.show());
+    alarmDialogWindow.on('closed', () => { alarmDialogWindow = null; });
+  }
+  if ((notificationMode === 'system' || notificationMode === 'both') && Notification.isSupported()) {
     const notification = new Notification({
       title: '⏰ Alarm!',
       body: alarm.message?.trim() || `Time: ${String(alarm.hour).padStart(2, '0')}:${String(alarm.minute).padStart(2, '0')}:${String(alarm.second).padStart(2, '0')}`,
       urgency: 'critical',
     });
     
-    // Stop the sound and blinking when the notification closes
-    notification.on('close', () => {
-      stopBlinking();
-      // Tell the renderer to stop the sound
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('alarm-dismiss-from-main');
-      }
-    });
-    
-    // Stop the sound and blinking when the notification is clicked
-    notification.on('click', () => {
-      stopBlinking();
-      // Tell the renderer to stop the sound
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('alarm-dismiss-from-main');
-      }
-    });
-    
+    notification.on('click', () => { mainWindow?.show(); mainWindow?.focus(); });
     notification.show();
-  }
-  
-  // Show the window if it is hidden
-  if (mainWindow && !mainWindow.isVisible()) {
-    mainWindow.show();
-    mainWindow.focus();
+  } else if (notificationMode === 'system') {
+    mainWindow?.show();
+    mainWindow?.focus();
   }
   
   // Send an event to the renderer
@@ -705,6 +713,26 @@ function initializeApp(): void {
     toggleCountdownWindow,
     destroyCountdownWindow,
     stopBlinking,
+    notifyAlarmDismissed: () => {
+      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('alarm-dismiss-from-main');
+    },
+    postponeAlarm: (alarmId, minutes) => {
+      if (alarmId !== activeAlarmId || !Number.isInteger(minutes) || minutes < 1 || minutes > 60) return { ok: false, error: 'Invalid postpone request.' };
+      const alarm = alarms.find(item => item.id === alarmId);
+      if (!alarm) return { ok: false, error: 'Alarm no longer exists.' };
+      const scheduledAt = Date.now() + minutes * 60_000;
+      const local = localDateTimeInTimezone(getEffectiveTimezone(), scheduledAt);
+      alarm.enabled = true;
+      alarm.completed = undefined;
+      alarm.scheduledAt = scheduledAt;
+      alarm.scheduledDate = `${local.year}-${String(local.month).padStart(2, '0')}-${String(local.day).padStart(2, '0')}`;
+      saveAlarms();
+      stopBlinking();
+      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('alarm-dismiss-from-main');
+      sendAlarmsToRenderer();
+      updateTrayIcon();
+      return { ok: true };
+    },
     getEffectiveTimezone,
     getTimezonePref: () => timezonePref,
     setTimezonePref: value => { timezonePref = value; },

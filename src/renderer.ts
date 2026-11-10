@@ -6,6 +6,10 @@ interface Alarm {
   second: number;
   enabled: boolean;
   recurring: boolean;
+  frequency?: 'once' | 'daily' | 'hourly';
+  notificationMode?: 'system' | 'window' | 'both';
+  postponeMinutes?: number;
+  sound?: 'classic' | 'digital' | 'gentle';
   scheduledAt?: number;
   scheduledDate?: string;
   message?: string;
@@ -34,19 +38,18 @@ interface ElectronAPI {
 }
 
 let alarms: Alarm[] = [];
-let editingAlarmId: string | null = null;
 let audioContext: AudioContext | null = null;
 let audioInterval: NodeJS.Timeout | null = null;
 let isAlarmPlaying: boolean = false;
-let alarmNotification: Notification | null = null;
-let notificationCheckInterval: NodeJS.Timeout | null = null;
+let isAlarmTriggered = false;
+let soundTestInterval: ReturnType<typeof setInterval> | null = null;
 let timeUpdateInterval: NodeJS.Timeout | null = null;
 let currentTimezoneInfo: { effective: string; isSystem: boolean } | null = null;
 let timeTimezoneInterval: ReturnType<typeof setInterval> | null = null;
 let pendingNewAlarmScheduledAt: number | undefined;
-let pendingEditScheduledAt: number | undefined;
 let pendingNewAlarmDate: string | undefined;
 let pendingNewAlarmMessage = '';
+let ringingAlarmId: string | null = null;
 let optionsAlarmId: string | null = null;
 const alarmTime = (window as any).AlarmTime;
 
@@ -91,8 +94,9 @@ function openAlarmOptions(alarmId?: string): void {
   const hourInput = document.getElementById('alarmOptionsHour') as HTMLInputElement | null;
   const minuteInput = document.getElementById('alarmOptionsMinute') as HTMLInputElement | null;
   const secondInput = document.getElementById('alarmOptionsSecond') as HTMLInputElement | null;
-  const recurringInput = document.getElementById('alarmOptionsRecurring') as HTMLInputElement | null;
-  if (!overlay || !dateInput || !messageInput || !hourInput || !minuteInput || !secondInput || !recurringInput) return;
+  const frequencyInputs = Array.from(document.querySelectorAll<HTMLInputElement>('input[name="alarmFrequency"]'));
+  const soundInput = document.getElementById('alarmOptionsSound') as HTMLSelectElement | null;
+  if (!overlay || !dateInput || !messageInput || !hourInput || !minuteInput || !secondInput) return;
   optionsAlarmId = alarmId ?? null;
   const tz = getEffectiveTimezoneForQuick();
   if (alarmId) {
@@ -102,19 +106,45 @@ function openAlarmOptions(alarmId?: string): void {
     hourInput.value = String(time.hour).padStart(2, '0');
     minuteInput.value = String(time.minute).padStart(2, '0');
     secondInput.value = String(time.second).padStart(2, '0');
-    recurringInput.checked = alarm.recurring;
+    const frequency = alarm.frequency ?? (alarm.recurring ? 'daily' : 'once');
+    frequencyInputs.forEach(input => input.checked = input.value === frequency);
     dateInput.value = alarm.scheduledDate ?? (alarm.scheduledAt === undefined ? '' : dateInTimezone(tz, alarm.scheduledAt));
     messageInput.value = alarm.message ?? '';
+    if (soundInput) soundInput.value = alarm.sound ?? 'classic';
+    const mode = alarm.notificationMode ?? 'window';
+    (document.getElementById(mode === 'system' ? 'notificationSystem' : mode === 'both' ? 'notificationBoth' : 'notificationWindow') as HTMLInputElement).checked = true;
+    document.getElementById('alarmOptionsTitle')!.textContent = 'Edit alarm';
   } else {
-    hourInput.value = (document.getElementById('newHour') as HTMLInputElement).value;
-    minuteInput.value = (document.getElementById('newMinute') as HTMLInputElement).value;
-    secondInput.value = (document.getElementById('newSecond') as HTMLInputElement).value;
-    recurringInput.checked = (document.getElementById('newRecurring') as HTMLInputElement).checked;
+    const target = pendingNewAlarmScheduledAt ?? Date.now() + 60_000;
+    const time = getLocalTimeFromTimestamp(tz, target);
+    hourInput.value = String(time.hour).padStart(2, '0');
+    minuteInput.value = String(time.minute).padStart(2, '0');
+    secondInput.value = String(time.second).padStart(2, '0');
+    frequencyInputs.forEach(input => input.checked = input.value === 'once');
     dateInput.value = pendingNewAlarmDate ?? (pendingNewAlarmScheduledAt === undefined ? '' : dateInTimezone(tz, pendingNewAlarmScheduledAt));
     messageInput.value = pendingNewAlarmMessage;
+    if (soundInput) soundInput.value = 'classic';
+    (document.getElementById('notificationWindow') as HTMLInputElement).checked = true;
+    document.getElementById('alarmOptionsTitle')!.textContent = 'Add alarm';
   }
+  const updateHourlyLabel = () => { document.getElementById('hourlyMinuteLabel')!.textContent = minuteInput.value.padStart(2, '0'); };
+  minuteInput.oninput = updateHourlyLabel;
+  updateHourlyLabel();
+  const updateFrequencyFields = () => {
+    const hourly = frequencyInputs.find(input => input.checked)?.value === 'hourly';
+    dateInput.disabled = hourly;
+    const timeGroup = hourInput.parentElement?.parentElement;
+    if (timeGroup) {
+      (timeGroup.children[0] as HTMLElement).hidden = hourly;
+      (timeGroup.children[1] as HTMLElement).hidden = hourly;
+      (timeGroup.children[3] as HTMLElement).hidden = hourly;
+      (timeGroup.children[4] as HTMLElement).hidden = hourly;
+    }
+    if (hourly) { hourInput.value = '00'; secondInput.value = '00'; }
+  };
+  frequencyInputs.forEach(input => input.onchange = updateFrequencyFields);
+  updateFrequencyFields();
   overlay.classList.add('modal-overlay--visible', 'show');
-  dateInput.focus();
 }
 
 async function saveAlarmOptions(): Promise<void> {
@@ -124,8 +154,10 @@ async function saveAlarmOptions(): Promise<void> {
   const hourInput = document.getElementById('alarmOptionsHour') as HTMLInputElement | null;
   const minuteInput = document.getElementById('alarmOptionsMinute') as HTMLInputElement | null;
   const secondInput = document.getElementById('alarmOptionsSecond') as HTMLInputElement | null;
-  const recurringInput = document.getElementById('alarmOptionsRecurring') as HTMLInputElement | null;
-  if (!overlay || !dateInput || !messageInput || !hourInput || !minuteInput || !secondInput || !recurringInput) return;
+  const frequency = document.querySelector<HTMLInputElement>('input[name="alarmFrequency"]:checked')?.value as 'once' | 'daily' | 'hourly' | undefined;
+  const notificationMode = document.querySelector<HTMLInputElement>('input[name="notificationMode"]:checked')?.value as 'system' | 'window' | 'both' | undefined;
+  const sound = (document.getElementById('alarmOptionsSound') as HTMLSelectElement).value as Alarm['sound'];
+  if (!overlay || !dateInput || !messageInput || !hourInput || !minuteInput || !secondInput || !frequency || !notificationMode) return;
   const date = dateInput.value || undefined;
   const message = messageInput.value.trim() || undefined;
   const hour = Number(hourInput.value);
@@ -136,12 +168,13 @@ async function saveAlarmOptions(): Promise<void> {
   if (!Number.isInteger(second) || second < 0 || second > 59) { alert('Enter valid seconds (0–59)'); return; }
   const alarm = optionsAlarmId ? alarms.find(item => item.id === optionsAlarmId) : undefined;
   if (optionsAlarmId && !alarm) return;
-  if (hasAlarmAtTime(hour, minute, second, alarm?.id, date, recurringInput.checked)) {
+  const recurring = frequency !== 'once';
+  if (frequency !== 'hourly' && hasAlarmAtTime(hour, minute, second, alarm?.id, date, recurring)) {
     alert('An alarm is already set for this time!');
     return;
   }
   let scheduledAt: number | undefined;
-  if (date) {
+  if (date && frequency !== 'hourly') {
     const [year, month, day] = date.split('-').map(Number);
     const targetTimestamp = alarmTime.zonedDateTimeToTimestamp(getEffectiveTimezoneForQuick(), { year, month, day, hour, minute, second });
     if (!Number.isFinite(targetTimestamp) || targetTimestamp <= Date.now()) {
@@ -154,10 +187,10 @@ async function saveAlarmOptions(): Promise<void> {
     const electronAPI = (window as any).electronAPI as ElectronAPI | undefined;
     if (!electronAPI) return;
     const scheduleChanged = hour !== alarm.hour || minute !== alarm.minute || second !== alarm.second
-      || recurringInput.checked !== alarm.recurring || date !== alarm.scheduledDate;
+      || frequency !== (alarm.frequency ?? (alarm.recurring ? 'daily' : 'once')) || date !== alarm.scheduledDate;
     const result = await electronAPI.updateAlarm({
-      ...alarm, hour, minute, second, recurring: recurringInput.checked,
-      scheduledDate: date, scheduledAt, message,
+      ...alarm, hour, minute, second, recurring, frequency, notificationMode, sound,
+      scheduledDate: frequency === 'hourly' ? undefined : date, scheduledAt, message,
       completed: alarm.completed && !scheduleChanged ? true : undefined,
     });
     if (!result.ok) { alert(result.error ?? 'Could not update the alarm.'); return; }
@@ -170,21 +203,17 @@ async function saveAlarmOptions(): Promise<void> {
       minute,
       second,
       enabled: true,
-      recurring: recurringInput.checked,
+      recurring,
+      frequency, notificationMode, sound,
       scheduledAt,
-      scheduledDate: date,
+      scheduledDate: frequency === 'hourly' ? undefined : date,
       message,
     });
     if (!result.ok) { alert(result.error ?? 'Could not add the alarm.'); return; }
-    (document.getElementById('newHour') as HTMLInputElement).value = '00';
-    (document.getElementById('newMinute') as HTMLInputElement).value = '00';
-    (document.getElementById('newSecond') as HTMLInputElement).value = '00';
-    (document.getElementById('newRecurring') as HTMLInputElement).checked = false;
     hourInput.value = '00';
     minuteInput.value = '00';
     secondInput.value = '00';
-    recurringInput.checked = false;
-    dateInput.value = '';
+    frequencyInputsReset();
     messageInput.value = '';
     pendingNewAlarmScheduledAt = undefined;
     pendingNewAlarmDate = undefined;
@@ -226,7 +255,7 @@ function hasAlarmAtTime(
   recurring = false,
 ): boolean {
   return alarms.some(alarm => {
-    // Skip the alarm currently being edited
+    // Ignore the alarm being updated.
     if (excludeAlarmId && alarm.id === excludeAlarmId) {
       return false;
     }
@@ -237,106 +266,9 @@ function hasAlarmAtTime(
   });
 }
 
-function updateTimeUntilForAlarms(): void {
-  // Update countdowns only for alarms that are not being edited
-  alarms.forEach(alarm => {
-    if (alarm.id === editingAlarmId) return; // Skip the alarm currently being edited
-    
-    const alarmItem = document.querySelector(`.alarm-item[data-id="${alarm.id}"]`);
-    if (!alarmItem) return;
-    
-    const timeUntilElement = alarmItem.querySelector('.alarm-item__countdown');
-    if (alarm.enabled) {
-      const timeUntil = getTimeUntilAlarm(alarm);
-      const timeUntilStr = formatTimeUntil(timeUntil);
-      
-      if (timeUntilElement) {
-        timeUntilElement.textContent = timeUntilStr;
-      } else {
-        // Add the countdown element if the alarm is enabled and it is missing
-        const timeGroup = alarmItem.querySelector('.alarm-item__time');
-        if (timeGroup) {
-          const timeUntilSpan = document.createElement('span');
-          timeUntilSpan.className = 'alarm-item__countdown';
-          timeUntilSpan.textContent = timeUntilStr;
-          timeGroup.appendChild(timeUntilSpan);
-        }
-      }
-    } else {
-      // Remove the countdown when the alarm is disabled
-      if (timeUntilElement) {
-        timeUntilElement.remove();
-      }
-    }
-  });
-}
-
-function setupTimeInputHandlers(input: HTMLInputElement): void {
-  // Avoid registering duplicate handlers by checking the data property
-  if ((input as any).__timeHandlersSetup) {
-    return; // Handlers are already registered
-  }
-  
-  // Clear the field on focus when its value is "0" or "00"
-  input.addEventListener('input', () => {
-    if (input.id.startsWith('edit-')) pendingEditScheduledAt = undefined;
-    else pendingNewAlarmScheduledAt = undefined;
-  });
-
-  input.addEventListener('focus', function focusHandler() {
-    if (this.value === '0' || this.value === '00') {
-      this.value = '';
-    }
-  });
-  
-  // Set the value to "0" on blur if the field is empty
-  input.addEventListener('blur', function blurHandler() {
-    if (this.value === '' || this.value.trim() === '') {
-      this.value = '0';
-    }
-  });
-  
-  // Mark the handlers as registered
-  (input as any).__timeHandlersSetup = true;
-}
-
 function renderAlarms(): void {
   const container = document.getElementById('alarmsList');
   if (!container) return;
-
-  // Save edit field values and focus before rerendering
-  let editingValues: { hour: string; minute: string; second: string; focusedField: string | null } | null = null;
-  if (editingAlarmId) {
-    const hourInput = document.getElementById(`edit-hour-${editingAlarmId}`) as HTMLInputElement;
-    const minuteInput = document.getElementById(`edit-minute-${editingAlarmId}`) as HTMLInputElement;
-    const secondInput = document.getElementById(`edit-second-${editingAlarmId}`) as HTMLInputElement;
-    
-    if (hourInput && minuteInput && secondInput) {
-      // Find which field has focus
-      let focusedField: string | null = null;
-      if (document.activeElement === hourInput) {
-        focusedField = 'hour';
-      } else if (document.activeElement === minuteInput) {
-        focusedField = 'minute';
-      } else if (document.activeElement === secondInput) {
-        focusedField = 'second';
-      }
-      
-      // Save the cursor position
-      const activeElement = document.activeElement as HTMLInputElement;
-      const cursorPosition = activeElement && (activeElement === hourInput || activeElement === minuteInput || activeElement === secondInput) 
-        ? activeElement.selectionStart 
-        : null;
-      
-      editingValues = {
-        hour: hourInput.value,
-        minute: minuteInput.value,
-        second: secondInput.value,
-        focusedField: focusedField,
-        cursorPosition: cursorPosition
-      } as any;
-    }
-  }
 
   if (alarms.length === 0) {
     container.innerHTML = '<div class="alarm-list__empty list-group-item text-center text-secondary">No alarms set</div>';
@@ -351,7 +283,6 @@ function renderAlarms(): void {
   });
 
   container.innerHTML = sortedAlarms.map(alarm => {
-    const isEditing = editingAlarmId === alarm.id;
     const scheduledLocalTime = alarm.scheduledAt === undefined
       ? null
       : getLocalTimeFromTimestamp(currentTimezoneInfo?.effective ?? Intl.DateTimeFormat().resolvedOptions().timeZone, alarm.scheduledAt);
@@ -359,339 +290,60 @@ function renderAlarms(): void {
     const displayMinute = scheduledLocalTime?.minute ?? alarm.minute;
     const displaySecond = scheduledLocalTime?.second ?? alarm.second;
     const timeStr = formatTime(displayHour, displayMinute, displaySecond);
-    const dateStr = alarm.scheduledDate
+    const baseDateStr = alarm.scheduledDate
       ? alarm.scheduledDate
       : dateInTimezone(currentTimezoneInfo?.effective ?? Intl.DateTimeFormat().resolvedOptions().timeZone,
           alarm.scheduledAt ?? alarmTime.nextAlarmTimestamp(currentTimezoneInfo?.effective ?? Intl.DateTimeFormat().resolvedOptions().timeZone, alarm, Date.now()));
+    const dateOnly = new Date(`${baseDateStr}T00:00:00Z`);
+    const todayOnly = new Date(`${dateInTimezone(currentTimezoneInfo?.effective ?? Intl.DateTimeFormat().resolvedOptions().timeZone, Date.now())}T00:00:00Z`);
+    const dateDelta = Math.round((dateOnly.getTime() - todayOnly.getTime()) / 86400000);
+    const relativeDate = dateDelta === 0 ? 'today' : dateDelta === 1 ? 'tomorrow' : dateDelta === -1 ? 'yesterday' : dateDelta > 1 ? `in ${dateDelta} days from now` : `${Math.abs(dateDelta)} days ago`;
+    const weekday = new Intl.DateTimeFormat('en-US', { weekday: 'short', timeZone: 'UTC' }).format(dateOnly);
+    const dateStr = `${baseDateStr} ${weekday} (${relativeDate})`;
+    const frequency = alarm.frequency ?? (alarm.recurring ? 'daily' : 'once');
+    const frequencyLabel = frequency === 'hourly' ? `Every hour at minute ${String(alarm.minute).padStart(2, '0')}` : frequency === 'daily' ? 'Every day' : 'Once';
     
-    if (isEditing) {
-      // Use saved field values when available, otherwise use the alarm values
-      const hourValue = editingValues ? editingValues.hour : displayHour;
-      const minuteValue = editingValues ? editingValues.minute : displayMinute;
-      const secondValue = editingValues ? editingValues.second : displaySecond;
-      
-      return `
-        <div class="alarm-item alarm-item--editing list-group-item d-flex flex-column align-items-stretch gap-3" data-id="${alarm.id}">
-          <div class="alarm-item__time-editor input-group input-group-sm justify-content-center">
-            <input type="number" min="0" max="23" value="${hourValue}" class="alarm-item__time-input alarm-item__time-input--hour form-control" id="edit-hour-${alarm.id}">
-            <span class="alarm-item__time-separator input-group-text">:</span>
-            <input type="number" min="0" max="59" value="${minuteValue}" class="alarm-item__time-input alarm-item__time-input--minute form-control" id="edit-minute-${alarm.id}">
-            <span class="alarm-item__time-separator input-group-text">:</span>
-            <input type="number" min="0" max="59" value="${secondValue}" class="alarm-item__time-input alarm-item__time-input--second form-control" id="edit-second-${alarm.id}">
-          </div>
-          <div class="quick-time d-flex flex-wrap justify-content-center gap-2">
-            <a href="#" class="quick-time__link btn btn-sm btn-outline-secondary" onclick="setQuickTimeSecondsForEdit('${alarm.id}', 30); return false;">in 30 seconds</a>
-            <a href="#" class="quick-time__link btn btn-sm btn-outline-secondary" onclick="setQuickTimeSecondsForEdit('${alarm.id}', 60); return false;">in 1 minute</a>
-            <a href="#" class="quick-time__link btn btn-sm btn-outline-secondary" onclick="setQuickTimeForEdit('${alarm.id}', 2); return false;">in 2 minutes</a>
-            <a href="#" class="quick-time__link btn btn-sm btn-outline-secondary" onclick="setQuickTimeForEdit('${alarm.id}', 5); return false;">in 5 minutes</a>
-            <a href="#" class="quick-time__link btn btn-sm btn-outline-secondary" onclick="setQuickTimeForEdit('${alarm.id}', 30); return false;">in 30 minutes</a>
-            <a href="#" class="quick-time__link btn btn-sm btn-outline-secondary" onclick="setQuickTimeForEdit('${alarm.id}', 60); return false;">in 1 hour</a>
-            <a href="#" class="quick-time__link btn btn-sm btn-outline-secondary" onclick="setQuickTimeForEdit('${alarm.id}', 120); return false;">in 2 hours</a>
-          </div>
-          <div class="alarm-actions d-flex justify-content-end gap-2">
-            <button class="alarm-actions__button--save btn btn-success" onclick="saveAlarm('${alarm.id}')">Save</button>
-            <button class="alarm-actions__button--cancel btn btn-secondary" onclick="cancelEdit('${alarm.id}')">Cancel</button>
-          </div>
+const timeUntil = alarm.enabled ? getTimeUntilAlarm(alarm) : 0;
+const timeUntilStr = alarm.enabled ? formatTimeUntil(timeUntil) : '';
+
+return `
+  <div class="alarm-item list-group-item d-flex flex-wrap justify-content-between align-items-center gap-3" data-id="${alarm.id}">
+    <div class="alarm-item__info d-flex flex-wrap align-items-center gap-3">
+      <div class="alarm-item__time d-flex flex-column">
+        <span class="alarm-item__time-value fs-3 fw-bold font-monospace">${timeStr}</span>
+        <span class="alarm-item__frequency small text-body-secondary">${frequencyLabel}</span>
+        <span class="alarm-item__date badge ${alarm.completed ? 'text-bg-success' : 'text-bg-secondary'} align-self-start">${dateStr}${alarm.completed ? ' · Done' : ''}</span>
+        ${alarm.enabled && timeUntilStr ? `<span class="alarm-item__countdown small text-body-secondary">${timeUntilStr}</span>` : ''}
+      </div>
+      <div class="alarm-item__toggles d-flex flex-wrap gap-3">
+        <div class="alarm-item__toggle form-check form-switch">
+            <input type="checkbox" class="form-check-input" id="enable-${alarm.id}" ${alarm.enabled ? 'checked' : ''} onchange="toggleAlarm('${alarm.id}', this.checked)">
+            <label class="form-check-label" for="enable-${alarm.id}">On</label>
         </div>
-      `;
-    } else {
-      const timeUntil = alarm.enabled ? getTimeUntilAlarm(alarm) : 0;
-      const timeUntilStr = alarm.enabled ? formatTimeUntil(timeUntil) : '';
-      
-      return `
-        <div class="alarm-item list-group-item d-flex flex-wrap justify-content-between align-items-center gap-3" data-id="${alarm.id}">
-          <div class="alarm-item__info d-flex flex-wrap align-items-center gap-3">
-            <div class="alarm-item__time d-flex flex-column">
-              <span class="alarm-item__time-value fs-3 fw-bold font-monospace">${timeStr}</span>
-              <span class="alarm-item__date badge ${alarm.completed ? 'text-bg-success' : 'text-bg-secondary'} align-self-start">${dateStr}${alarm.completed ? ' · Done' : ''}</span>
-              ${alarm.enabled && timeUntilStr ? `<span class="alarm-item__countdown small text-body-secondary">${timeUntilStr}</span>` : ''}
-            </div>
-            <div class="alarm-item__toggles d-flex flex-wrap gap-3">
-              <div class="alarm-item__toggle form-check form-switch">
-                  <input type="checkbox" class="form-check-input" id="enable-${alarm.id}" ${alarm.enabled ? 'checked' : ''} onchange="toggleAlarm('${alarm.id}', this.checked)">
-                  <label class="form-check-label" for="enable-${alarm.id}">On</label>
-              </div>
-              <div class="alarm-item__toggle form-check form-switch">
-                  <input type="checkbox" class="form-check-input" id="repeat-${alarm.id}" ${alarm.recurring ? 'checked' : ''} onchange="toggleRecurring('${alarm.id}', this.checked)">
-                  <label class="form-check-label" for="repeat-${alarm.id}">Repeat</label>
-              </div>
-            </div>
-          </div>
-          <div class="alarm-actions d-flex gap-2">
-            <button class="alarm-actions__options btn btn-outline-secondary" aria-label="More options" onclick="openAlarmOptions('${alarm.id}')">...</button>
-            <button class="alarm-actions__button--edit btn btn-outline-primary" onclick="editAlarm('${alarm.id}')">Edit</button>
-            <button class="alarm-actions__button--delete btn btn-outline-danger" onclick="deleteAlarm('${alarm.id}')">Delete</button>
-          </div>
-        </div>
-      `;
-    }
+      </div>
+    </div>
+    <div class="alarm-actions d-flex gap-2">
+      <button class="alarm-actions__button--edit btn btn-outline-primary" onclick="editAlarm('${alarm.id}')">Edit</button>
+      <button class="alarm-actions__button--delete btn btn-outline-danger" onclick="deleteAlarm('${alarm.id}')">Delete</button>
+    </div>
+  </div>
+`;
   }).join('');
 
-  // Restore focus and cursor position after rerendering
-  if (editingAlarmId && editingValues && editingValues.focusedField) {
-    setTimeout(() => {
-      let inputToFocus: HTMLInputElement | null = null;
-      if (editingValues!.focusedField === 'hour') {
-        inputToFocus = document.getElementById(`edit-hour-${editingAlarmId}`) as HTMLInputElement;
-      } else if (editingValues!.focusedField === 'minute') {
-        inputToFocus = document.getElementById(`edit-minute-${editingAlarmId}`) as HTMLInputElement;
-      } else if (editingValues!.focusedField === 'second') {
-        inputToFocus = document.getElementById(`edit-second-${editingAlarmId}`) as HTMLInputElement;
-      }
-      
-      if (inputToFocus) {
-        // Set up handlers for the edit fields
-        setupTimeInputHandlers(inputToFocus);
-        inputToFocus.focus();
-        // Restore the cursor position
-        const cursorPos = (editingValues as any).cursorPosition;
-        if (cursorPos !== null && cursorPos !== undefined) {
-          inputToFocus.setSelectionRange(cursorPos, cursorPos);
-        }
-      }
-      
-      // Set up handlers for all edit fields
-      const hourInput = document.getElementById(`edit-hour-${editingAlarmId}`) as HTMLInputElement;
-      const minuteInput = document.getElementById(`edit-minute-${editingAlarmId}`) as HTMLInputElement;
-      const secondInput = document.getElementById(`edit-second-${editingAlarmId}`) as HTMLInputElement;
-      
-      if (hourInput) setupTimeInputHandlers(hourInput);
-      if (minuteInput) setupTimeInputHandlers(minuteInput);
-      if (secondInput) setupTimeInputHandlers(secondInput);
-    }, 0);
-  }
+
+}
+
+function frequencyInputsReset(): void {
+  const once = document.getElementById('alarmFrequencyOnce') as HTMLInputElement | null;
+  if (once) once.checked = true;
 }
 
 function getEffectiveTimezoneForQuick(): string {
   return currentTimezoneInfo?.effective ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
 }
 
-function setQuickTime(minutes: number): void {
-  const hourInput = document.getElementById('newHour') as HTMLInputElement;
-  const minuteInput = document.getElementById('newMinute') as HTMLInputElement;
-  const secondInput = document.getElementById('newSecond') as HTMLInputElement;
-  
-  if (!hourInput || !minuteInput || !secondInput) return;
-
-  const tz = getEffectiveTimezoneForQuick();
-  const futureTs = Date.now() + minutes * 60 * 1000;
-  pendingNewAlarmScheduledAt = futureTs;
-  const { hour, minute, second } = getLocalTimeFromTimestamp(tz, futureTs);
-
-  hourInput.value = String(hour).padStart(2, '0');
-  minuteInput.value = String(minute).padStart(2, '0');
-  secondInput.value = String(second).padStart(2, '0');
-}
-
-function setQuickTimeSeconds(seconds: number): void {
-  const hourInput = document.getElementById('newHour') as HTMLInputElement;
-  const minuteInput = document.getElementById('newMinute') as HTMLInputElement;
-  const secondInput = document.getElementById('newSecond') as HTMLInputElement;
-  
-  if (!hourInput || !minuteInput || !secondInput) return;
-
-  const tz = getEffectiveTimezoneForQuick();
-  const futureTs = Date.now() + seconds * 1000;
-  pendingNewAlarmScheduledAt = futureTs;
-  const { hour, minute, second } = getLocalTimeFromTimestamp(tz, futureTs);
-
-  hourInput.value = String(hour).padStart(2, '0');
-  minuteInput.value = String(minute).padStart(2, '0');
-  secondInput.value = String(second).padStart(2, '0');
-}
-
-function setQuickTimeForEdit(alarmId: string, minutes: number): void {
-  const hourInput = document.getElementById(`edit-hour-${alarmId}`) as HTMLInputElement;
-  const minuteInput = document.getElementById(`edit-minute-${alarmId}`) as HTMLInputElement;
-  const secondInput = document.getElementById(`edit-second-${alarmId}`) as HTMLInputElement;
-  
-  if (!hourInput || !minuteInput || !secondInput) return;
-
-  const tz = getEffectiveTimezoneForQuick();
-  const futureTs = Date.now() + minutes * 60 * 1000;
-  pendingEditScheduledAt = futureTs;
-  const { hour, minute, second } = getLocalTimeFromTimestamp(tz, futureTs);
-
-  hourInput.value = String(hour).padStart(2, '0');
-  minuteInput.value = String(minute).padStart(2, '0');
-  secondInput.value = String(second).padStart(2, '0');
-}
-
-function setQuickTimeSecondsForEdit(alarmId: string, seconds: number): void {
-  const hourInput = document.getElementById(`edit-hour-${alarmId}`) as HTMLInputElement;
-  const minuteInput = document.getElementById(`edit-minute-${alarmId}`) as HTMLInputElement;
-  const secondInput = document.getElementById(`edit-second-${alarmId}`) as HTMLInputElement;
-  
-  if (!hourInput || !minuteInput || !secondInput) return;
-
-  const tz = getEffectiveTimezoneForQuick();
-  const futureTs = Date.now() + seconds * 1000;
-  pendingEditScheduledAt = futureTs;
-  const { hour, minute, second } = getLocalTimeFromTimestamp(tz, futureTs);
-
-  hourInput.value = String(hour).padStart(2, '0');
-  minuteInput.value = String(minute).padStart(2, '0');
-  secondInput.value = String(second).padStart(2, '0');
-}
-
-async function addAlarm(): Promise<void> {
-  const hourInput = document.getElementById('newHour') as HTMLInputElement;
-  const minuteInput = document.getElementById('newMinute') as HTMLInputElement;
-  const secondInput = document.getElementById('newSecond') as HTMLInputElement;
-  
-  if (!hourInput || !minuteInput || !secondInput) return;
-
-  const hour = parseInt(hourInput.value, 10);
-  const minute = parseInt(minuteInput.value, 10);
-  const second = parseInt(secondInput.value, 10);
-
-  if (isNaN(hour) || hour < 0 || hour > 23) {
-    alert('Enter a valid hour (0–23)');
-    return;
-  }
-
-  if (isNaN(minute) || minute < 0 || minute > 59) {
-    alert('Enter valid minutes (0–59)');
-    return;
-  }
-
-  if (isNaN(second) || second < 0 || second > 59) {
-    alert('Enter valid seconds (0–59)');
-    return;
-  }
-
-  const recurringInput = document.getElementById('newRecurring') as HTMLInputElement;
-  const recurring = recurringInput ? recurringInput.checked : false;
-  if (hasAlarmAtTime(hour, minute, second, undefined, pendingNewAlarmDate, recurring)) {
-    alert('An alarm already exists at that time and date.');
-    return;
-  }
-
-  const newAlarm: Alarm = {
-    id: generateAlarmId(),
-    hour,
-    minute,
-    second,
-    enabled: true,
-    recurring,
-    scheduledAt: pendingNewAlarmScheduledAt,
-    scheduledDate: pendingNewAlarmDate,
-    message: pendingNewAlarmMessage.trim() || undefined,
-  };
-
-  const electronAPI = (window as any).electronAPI as ElectronAPI | undefined;
-  if (!electronAPI) return;
-  const result = await electronAPI.addAlarm(newAlarm);
-  if (!result.ok) { alert(result.error ?? 'Could not add the alarm.'); return; }
-
-  // Reset the input fields
-  hourInput.value = '00';
-  minuteInput.value = '00';
-  secondInput.value = '00';
-  if (recurringInput) {
-    recurringInput.checked = false;
-  }
-  pendingNewAlarmScheduledAt = undefined;
-  pendingNewAlarmDate = undefined;
-  pendingNewAlarmMessage = '';
-}
-
 function editAlarm(alarmId: string): void {
-  editingAlarmId = alarmId;
-  pendingEditScheduledAt = alarms.find(alarm => alarm.id === alarmId)?.scheduledAt;
-  renderAlarms();
-  
-  // Set up handlers for the edit fields after rerendering
-  setTimeout(() => {
-    const hourInput = document.getElementById(`edit-hour-${alarmId}`) as HTMLInputElement;
-    const minuteInput = document.getElementById(`edit-minute-${alarmId}`) as HTMLInputElement;
-    const secondInput = document.getElementById(`edit-second-${alarmId}`) as HTMLInputElement;
-    
-    if (hourInput) setupTimeInputHandlers(hourInput);
-    if (minuteInput) setupTimeInputHandlers(minuteInput);
-    if (secondInput) setupTimeInputHandlers(secondInput);
-  }, 0);
-}
-
-function cancelEdit(alarmId: string): void {
-  editingAlarmId = null;
-  pendingEditScheduledAt = undefined;
-  renderAlarms();
-}
-
-async function saveAlarm(alarmId: string): Promise<void> {
-  const hourInput = document.getElementById(`edit-hour-${alarmId}`) as HTMLInputElement;
-  const minuteInput = document.getElementById(`edit-minute-${alarmId}`) as HTMLInputElement;
-  const secondInput = document.getElementById(`edit-second-${alarmId}`) as HTMLInputElement;
-
-  if (!hourInput || !minuteInput || !secondInput) return;
-
-  // Treat an empty field as 0
-  const hour = hourInput.value === '' ? 0 : parseInt(hourInput.value, 10);
-  const minute = minuteInput.value === '' ? 0 : parseInt(minuteInput.value, 10);
-  const second = secondInput.value === '' ? 0 : parseInt(secondInput.value, 10);
-
-  if (isNaN(hour) || hour < 0 || hour > 23) {
-    alert('Enter a valid hour (0–23)');
-    return;
-  }
-
-  if (isNaN(minute) || minute < 0 || minute > 59) {
-    alert('Enter valid minutes (0–59)');
-    return;
-  }
-
-  if (isNaN(second) || second < 0 || second > 59) {
-    alert('Enter valid seconds (0–59)');
-    return;
-  }
-
-  const alarm = alarms.find(a => a.id === alarmId);
-  if (!alarm) return;
-
-  // Check whether another alarm already exists at this time
-  if (hasAlarmAtTime(hour, minute, second, alarmId, alarm.scheduledDate, alarm.recurring)) {
-    alert('An alarm already exists at that time and date.');
-    return;
-  }
-
-  let scheduledDate = alarm.scheduledDate;
-  let scheduledAt: number | undefined;
-  if (pendingEditScheduledAt !== undefined) {
-    scheduledAt = pendingEditScheduledAt;
-    if (scheduledDate) scheduledDate = dateInTimezone(getEffectiveTimezoneForQuick(), scheduledAt);
-  } else if (scheduledDate) {
-    const targetTimestamp = alarmTime.zonedDateTimeToTimestamp(getEffectiveTimezoneForQuick(), {
-      year: Number(scheduledDate.slice(0, 4)),
-      month: Number(scheduledDate.slice(5, 7)),
-      day: Number(scheduledDate.slice(8, 10)),
-      hour, minute, second,
-    });
-    if (alarm.enabled && targetTimestamp <= Date.now()) {
-      alert('Choose a future date and time.');
-      return;
-    }
-    scheduledAt = targetTimestamp;
-  }
-
-  const updatedAlarm: Alarm = {
-    ...alarm,
-    hour,
-    minute,
-    second,
-    scheduledAt,
-    scheduledDate,
-    completed: alarm.completed && hour === alarm.hour && minute === alarm.minute && second === alarm.second
-      && scheduledDate === alarm.scheduledDate ? true : undefined,
-  };
-
-  const electronAPI = (window as any).electronAPI as ElectronAPI | undefined;
-  if (!electronAPI) return;
-  const result = await electronAPI.updateAlarm(updatedAlarm);
-  if (!result.ok) { alert(result.error ?? 'Could not update the alarm.'); return; }
-
-  editingAlarmId = null;
-  pendingEditScheduledAt = undefined;
+  openAlarmOptions(alarmId);
 }
 
 async function deleteAlarm(alarmId: string): Promise<void> {
@@ -720,22 +372,7 @@ async function toggleAlarm(alarmId: string, enabled: boolean): Promise<void> {
   if (!result.ok) { alert(result.error ?? 'Could not update the alarm.'); renderAlarms(); }
 }
 
-async function toggleRecurring(alarmId: string, recurring: boolean): Promise<void> {
-  const alarm = alarms.find(a => a.id === alarmId);
-  if (!alarm) return;
-
-  const updatedAlarm: Alarm = {
-    ...alarm,
-    recurring,
-  };
-
-  const electronAPI = (window as any).electronAPI as ElectronAPI | undefined;
-  if (!electronAPI) return;
-  const result = await electronAPI.updateAlarm(updatedAlarm);
-  if (!result.ok) { alert(result.error ?? 'Could not update the alarm.'); renderAlarms(); }
-}
-
-function playAlarmSound(): void {
+function playAlarmSound(sound: string = 'classic'): void {
   // Create the alarm sound with the Web Audio API
   try {
     const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
@@ -750,8 +387,8 @@ function playAlarmSound(): void {
       oscillator.connect(gainNode);
       gainNode.connect(audioContext.destination);
 
-      oscillator.frequency.value = 800; // Frequency in Hz
-      oscillator.type = 'sine';
+      oscillator.frequency.value = sound === 'digital' ? 1100 : sound === 'gentle' ? 520 : 800;
+      oscillator.type = sound === 'digital' ? 'square' : 'sine';
 
       gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
       gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
@@ -782,32 +419,24 @@ function stopAlarmSound(): void {
     clearInterval(audioInterval);
     audioInterval = null;
   }
-  if (notificationCheckInterval) {
-    clearInterval(notificationCheckInterval);
-    notificationCheckInterval = null;
-  }
   if (audioContext) {
     audioContext.close().catch(() => {
       // Ignore errors during close
     });
     audioContext = null;
   }
-  if (alarmNotification) {
-    alarmNotification.close();
-    alarmNotification = null;
-  }
   updateDismissButton();
 }
 
 function updateDismissButton(): void {
-  const dismissBtn = document.getElementById('dismissAlarmBtn') as HTMLButtonElement;
-  if (dismissBtn) {
-    dismissBtn.style.display = (isAlarmPlaying || alarmNotification !== null) ? 'block' : 'none';
-  }
+  const dismissButton = document.getElementById('dismissAlarmBtn') as HTMLButtonElement | null;
+  if (dismissButton) dismissButton.style.display = isAlarmTriggered ? 'inline-block' : 'none';
 }
 
 function dismissAlarm(): void {
   stopAlarmSound();
+  isAlarmTriggered = false;
+  ringingAlarmId = null;
   
   // Stop blinking the tray icon
   const electronAPI = (window as any).electronAPI as ElectronAPI | undefined;
@@ -816,104 +445,32 @@ function dismissAlarm(): void {
   }
 }
 
-async function showAlarmNotification(alarm: Alarm): Promise<void> {
-  let permission = Notification.permission;
-  if (permission === 'default') {
-    try {
-      permission = await Notification.requestPermission();
-    } catch (error) {
-      console.warn('Could not request notification permission:', error);
-    }
-  }
-
-  if (permission === 'granted') {
-    const timeStr = formatTime(alarm.hour, alarm.minute, alarm.second);
-    alarmNotification = new Notification('⏰ Alarm!', {
-      body: alarm.message?.trim() || `Time: ${timeStr}`,
-      requireInteraction: true,
-      tag: 'alarm-alert'
-    });
-
-    // Handle notification dismissal
-    const handleNotificationClose = () => {
-      console.log('Browser notification closed; stopping the sound');
-      // Ensure the sound stops
-      if (isAlarmPlaying) {
-        dismissAlarm();
-      }
-    };
-
-    // Handle notification clicks
-    const handleNotificationClick = () => {
-      console.log('Browser notification clicked; stopping the sound');
-      if (isAlarmPlaying) {
-        dismissAlarm();
-      }
-      if (window.focus) window.focus();
-    };
-
-    // Stop the sound and blinking when the notification closes
-    // Use both addEventListener and event properties for compatibility
-    try {
-      alarmNotification.addEventListener('close', handleNotificationClose);
-    } catch (e) {
-      console.warn('Could not add a close event listener:', e);
-    }
-    
-    // Also set onclose for Electron versions that support it
-    alarmNotification.onclose = handleNotificationClose;
-
-    // Stop the sound and blinking when the notification is clicked
-    try {
-      alarmNotification.addEventListener('click', handleNotificationClick);
-    } catch (e) {
-      console.warn('Could not add a click event listener:', e);
-    }
-    
-    alarmNotification.onclick = handleNotificationClick;
-    
-    // As a fallback, handle errors when the notification cannot be shown
-    try {
-      alarmNotification.addEventListener('error', (e) => {
-        console.error('Browser notification error:', e);
-      });
-    } catch (e) {
-      // Ignore errors while adding the error handler
-    }
-  } else {
-    // Show an alert if notifications are unavailable
-    const timeStr = formatTime(alarm.hour, alarm.minute, alarm.second);
-    alert(alarm.message?.trim() || `⏰ Alarm! Time: ${timeStr}`);
-    // Stop the sound and blinking after the alert closes
-    dismissAlarm();
-  }
-}
-
-// Expose functions for inline event handlers
-(window as any).addAlarm = addAlarm;
+// Expose functions used by alarm list buttons.
 (window as any).editAlarm = editAlarm;
-(window as any).cancelEdit = cancelEdit;
-(window as any).saveAlarm = saveAlarm;
 (window as any).openAlarmOptions = openAlarmOptions;
 (window as any).deleteAlarm = deleteAlarm;
 (window as any).toggleAlarm = toggleAlarm;
-(window as any).toggleRecurring = toggleRecurring;
-(window as any).setQuickTime = setQuickTime;
-(window as any).setQuickTimeSeconds = setQuickTimeSeconds;
-(window as any).setQuickTimeForEdit = setQuickTimeForEdit;
-(window as any).setQuickTimeSecondsForEdit = setQuickTimeSecondsForEdit;
 
 // Initialize when the page loads
 document.addEventListener('DOMContentLoaded', () => {
-  // Request notification permission on page load
-  if (Notification.permission === 'default') {
-    Notification.requestPermission();
-  }
-
   const electronAPI = (window as any).electronAPI as ElectronAPI | undefined;
   const optionsOverlay = document.getElementById('alarmOptionsOverlay');
-  document.getElementById('newAlarmOptionsBtn')?.addEventListener('click', () => openAlarmOptions());
+  document.getElementById('addAlarmBtn')?.addEventListener('click', () => openAlarmOptions());
   document.getElementById('alarmOptionsSaveBtn')?.addEventListener('click', saveAlarmOptions);
+  document.querySelectorAll<HTMLButtonElement>('[data-reminder-seconds]').forEach(button => {
+    button.addEventListener('click', () => {
+      const seconds = Number(button.dataset.reminderSeconds);
+      const target = Date.now() + seconds * 1000;
+      pendingNewAlarmScheduledAt = target;
+      pendingNewAlarmDate = dateInTimezone(getEffectiveTimezoneForQuick(), target);
+      openAlarmOptions();
+      const time = getLocalTimeFromTimestamp(getEffectiveTimezoneForQuick(), target);
+      (document.getElementById('alarmOptionsHour') as HTMLInputElement).value = String(time.hour).padStart(2, '0');
+      (document.getElementById('alarmOptionsMinute') as HTMLInputElement).value = String(time.minute).padStart(2, '0');
+      (document.getElementById('alarmOptionsSecond') as HTMLInputElement).value = String(time.second).padStart(2, '0');
+      (document.getElementById('alarmOptionsDate') as HTMLInputElement).value = pendingNewAlarmDate;
+    });
+  });
   document.querySelectorAll<HTMLAnchorElement>('[data-options-seconds], [data-options-minutes]').forEach(link => {
     link.addEventListener('click', event => {
       event.preventDefault();
@@ -970,90 +527,43 @@ document.addEventListener('DOMContentLoaded', () => {
     timeUpdateInterval = setInterval(() => {
       // If an alarm is being edited, update only its countdown
       // Avoid a full rerender so focus is preserved
-      if (editingAlarmId) {
-        updateTimeUntilForAlarms();
-      } else {
-        renderAlarms();
-      }
+      renderAlarms();
     }, 1000);
 
     // Listen for triggered alarms
     electronAPI.onAlarmTriggered((alarmId) => {
       const alarm = alarms.find(a => a.id === alarmId);
       if (alarm) {
+        ringingAlarmId = alarmId;
+        isAlarmTriggered = true;
         // Play the alarm sound
-        playAlarmSound();
+        playAlarmSound(alarm.sound ?? 'classic');
         updateDismissButton();
-        // Show a notification
-        showAlarmNotification(alarm);
       }
     });
 
     // Listen for the main process closing a native notification
     electronAPI.onAlarmDismissFromMain(() => {
-      console.log('Received a message from the main process to close the native notification');
-      // Stop the sound
-      isAlarmPlaying = false;
-      if (audioInterval) {
-        clearInterval(audioInterval);
-        audioInterval = null;
-      }
-      if (audioContext) {
-        audioContext.close().catch(() => {});
-        audioContext = null;
-      }
-      // Close the browser notification if it is still active
-      if (alarmNotification) {
-        try {
-          alarmNotification.close();
-        } catch (e) {
-          console.error('Could not close browser notification:', e);
-        }
-        alarmNotification = null;
-      }
-      // Update the button
+      stopAlarmSound();
+      isAlarmTriggered = false;
+      ringingAlarmId = null;
       updateDismissButton();
-      // Acknowledge the main process (dismissAlarm has already done this)
-      // The main process already stopped blinking, so only update the UI
     });
   }
 
-  // Handle Enter in the input fields
-  const hourInput = document.getElementById('newHour') as HTMLInputElement;
-  const minuteInput = document.getElementById('newMinute') as HTMLInputElement;
-  const secondInput = document.getElementById('newSecond') as HTMLInputElement;
-  const addBtn = document.getElementById('addAlarmBtn');
-
-  if (hourInput) {
-    setupTimeInputHandlers(hourInput);
-    hourInput.addEventListener('keypress', (e: KeyboardEvent) => {
-      if (e.key === 'Enter') {
-        minuteInput?.focus();
-      }
-    });
-  }
-
-  if (minuteInput) {
-    setupTimeInputHandlers(minuteInput);
-    minuteInput.addEventListener('keypress', (e: KeyboardEvent) => {
-      if (e.key === 'Enter') {
-        secondInput?.focus();
-      }
-    });
-  }
-
-  if (secondInput) {
-    setupTimeInputHandlers(secondInput);
-    secondInput.addEventListener('keypress', (e: KeyboardEvent) => {
-      if (e.key === 'Enter' && addBtn) {
-        addAlarm();
-      }
-    });
-  }
-
-  if (addBtn) {
-    addBtn.addEventListener('click', addAlarm);
-  }
+  document.getElementById('soundTestBtn')?.addEventListener('click', () => {
+    const button = document.getElementById('soundTestBtn') as HTMLButtonElement;
+    if (soundTestInterval) {
+      clearInterval(soundTestInterval);
+      soundTestInterval = null;
+      stopAlarmSound();
+      button.textContent = 'Test';
+    } else {
+      playAlarmSound((document.getElementById('alarmOptionsSound') as HTMLSelectElement).value);
+      button.textContent = 'Stop';
+      soundTestInterval = setTimeout(() => { soundTestInterval = null; stopAlarmSound(); button.textContent = 'Test'; }, 2500) as any;
+    }
+  });
 
   // Set up the app control buttons
   const countdownWindowBtn = document.getElementById('countdownWindowBtn');

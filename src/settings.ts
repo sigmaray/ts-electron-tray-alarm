@@ -9,6 +9,10 @@ export interface Alarm {
   second: number;
   enabled: boolean;
   recurring: boolean;
+  frequency?: 'once' | 'daily' | 'hourly';
+  notificationMode?: 'system' | 'window' | 'both';
+  postponeMinutes?: number;
+  sound?: 'classic' | 'digital' | 'gentle';
   scheduledAt?: number;
   scheduledDate?: string;
   message?: string;
@@ -58,6 +62,10 @@ function parseAlarm(raw: unknown): Alarm | null {
     second: clampTimeUnit(item.second, 0, 59),
     enabled: item.enabled === true,
     recurring: item.recurring === true,
+    ...(item.frequency === 'once' || item.frequency === 'daily' || item.frequency === 'hourly' ? { frequency: item.frequency } : {}),
+    ...(item.notificationMode === 'system' || item.notificationMode === 'window' || item.notificationMode === 'both' ? { notificationMode: item.notificationMode } : {}),
+    ...(Number.isInteger(item.postponeMinutes) && Number(item.postponeMinutes) >= 1 && Number(item.postponeMinutes) <= 60 ? { postponeMinutes: Number(item.postponeMinutes) } : {}),
+    ...(item.sound === 'classic' || item.sound === 'digital' || item.sound === 'gentle' ? { sound: item.sound } : {}),
     ...(scheduledAt === undefined ? {} : { scheduledAt }),
     ...(isValidDate(item.scheduledDate) ? { scheduledDate: item.scheduledDate as string } : {}),
     ...(typeof item.message === 'string' ? { message: item.message.slice(0, 500) } : {}),
@@ -103,6 +111,10 @@ export function isValidAlarmPayload(value: unknown): value is Alarm {
     && Number.isInteger(alarm.second) && (alarm.second as number) >= 0 && (alarm.second as number) <= 59
     && typeof alarm.enabled === 'boolean'
     && typeof alarm.recurring === 'boolean'
+    && (alarm.frequency === undefined || alarm.frequency === 'once' || alarm.frequency === 'daily' || alarm.frequency === 'hourly')
+    && (alarm.notificationMode === undefined || alarm.notificationMode === 'system' || alarm.notificationMode === 'window' || alarm.notificationMode === 'both')
+    && (alarm.postponeMinutes === undefined || (Number.isInteger(alarm.postponeMinutes) && (alarm.postponeMinutes as number) >= 1 && (alarm.postponeMinutes as number) <= 60))
+    && (alarm.sound === undefined || alarm.sound === 'classic' || alarm.sound === 'digital' || alarm.sound === 'gentle')
     && (alarm.scheduledAt === undefined || (typeof alarm.scheduledAt === 'number' && Number.isFinite(alarm.scheduledAt) && Math.abs(alarm.scheduledAt) <= 8.64e15))
     && (alarm.scheduledDate === undefined || isValidDate(alarm.scheduledDate))
     && (alarm.message === undefined || (typeof alarm.message === 'string' && alarm.message.length <= 500))

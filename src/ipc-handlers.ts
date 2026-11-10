@@ -13,6 +13,8 @@ export interface IpcDependencies {
   toggleCountdownWindow(): void;
   destroyCountdownWindow(): void;
   stopBlinking(): void;
+  postponeAlarm(alarmId: string, minutes: number): { ok: boolean; error?: string };
+  notifyAlarmDismissed(): void;
   getEffectiveTimezone(): string;
   getTimezonePref(): string | null;
   setTimezonePref(timezone: string | null): void;
@@ -69,7 +71,8 @@ export function registerIpcHandlers(deps: IpcDependencies, handlers: IpcMain = i
   handlers.on('minimize-window', () => deps.minimizeWindow());
   handlers.on('tray-click', () => deps.trayClick());
   handlers.on('close-app', () => { app.isQuitting = true; app.quit(); });
-  handlers.on('alarm-dismiss', () => deps.stopBlinking());
+  handlers.on('alarm-dismiss', () => { deps.stopBlinking(); deps.notifyAlarmDismissed(); });
+  handlers.handle('alarm-postpone', (_event, alarmId: string, minutes: number) => deps.postponeAlarm(alarmId, minutes));
   handlers.on('countdown-window-toggle', () => deps.toggleCountdownWindow());
   handlers.on('countdown-window-close', () => deps.destroyCountdownWindow());
   handlers.handle('get-timezones', (): string[] => {
