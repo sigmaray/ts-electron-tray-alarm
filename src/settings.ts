@@ -202,11 +202,13 @@ export function createSettingsStore(paths: SettingsPaths) {
   const getPath = (): string => {
     if (paths.overridePath) return paths.overridePath;
     if (fallbackPath) return fallbackPath;
-    const marker = path.join(paths.resourcesPath, 'portable-mode');
-    if (paths.isPackaged && fs.existsSync(marker)) {
+    const marker = [path.join(paths.resourcesPath, 'portable-mode'), path.join(paths.appPath, 'portable-mode')]
+      .find(candidate => fs.existsSync(candidate));
+    if (marker) {
+      const portableDirectory = path.dirname(marker);
       try {
-        fs.accessSync(paths.resourcesPath, fs.constants.W_OK);
-        const portable = path.join(paths.resourcesPath, 'settings.json');
+        fs.accessSync(portableDirectory, fs.constants.W_OK);
+        const portable = path.join(portableDirectory, 'settings.json');
         if (!fs.existsSync(portable) && fs.existsSync(userDataFile)) fs.copyFileSync(userDataFile, portable);
         return portable;
       } catch {
@@ -261,7 +263,9 @@ export function createSettingsStore(paths: SettingsPaths) {
         fs.writeFileSync(target, JSON.stringify(settings, null, 2), 'utf8');
         console.info(`[settings] Saved ${target}`);
       } catch (error) {
-        const portable = paths.isPackaged && !paths.overridePath && target !== userDataFile;
+        const portable = !paths.overridePath && target !== userDataFile
+          && (fs.existsSync(path.join(paths.resourcesPath, 'portable-mode'))
+            || fs.existsSync(path.join(paths.appPath, 'portable-mode')));
         if (portable) {
           console.warn(`[settings] Could not save portable settings at ${target}; using ${userDataFile}`, error);
           fallbackPath = userDataFile;

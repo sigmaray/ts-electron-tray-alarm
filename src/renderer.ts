@@ -331,12 +331,18 @@ function renderAlarms(): void {
   const container = document.getElementById('alarmsList');
   if (!container) return;
 
-  // Sort alarms by time
-  const sortedAlarms = [...alarms].sort((a, b) => {
-    if (a.hour !== b.hour) return a.hour - b.hour;
-    if (a.minute !== b.minute) return a.minute - b.minute;
-    return a.second - b.second;
-  });
+  const sortTimeZone = currentTimezoneInfo?.effective ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const sortNow = Date.now();
+  const alarmSortTimestamp = (alarm: Alarm, frequency: 'once' | 'daily' | 'hourly'): number => {
+    if (alarm.scheduledAt !== undefined) return alarm.scheduledAt;
+    if (frequency === 'once' && alarm.scheduledDate) {
+      const [year, month, day] = alarm.scheduledDate.split('-').map(Number);
+      return alarmTime.zonedDateTimeToTimestamp(sortTimeZone, {
+        year, month, day, hour: alarm.hour, minute: alarm.minute, second: alarm.second,
+      });
+    }
+    return alarmTime.nextAlarmTimestamp(sortTimeZone, alarm, sortNow);
+  };
 
   const renderAlarm = (alarm: Alarm): string => {
     const scheduledLocalTime = alarm.scheduledAt === undefined
@@ -386,7 +392,7 @@ return `
 `;
   };
 
-  if (sortedAlarms.length === 0) {
+  if (alarms.length === 0) {
     container.innerHTML = '<div class="alarm-list__empty card shadow mb-4 p-3 text-center text-secondary">No alarms set</div>';
     return;
   }
@@ -397,7 +403,21 @@ return `
     { frequency: 'hourly', title: 'Every Hour' },
   ];
   container.innerHTML = groups.map(group => {
-    const groupAlarms = sortedAlarms.filter(alarm => (alarm.frequency ?? (alarm.recurring ? 'daily' : 'once')) === group.frequency);
+    const groupAlarms = alarms
+      .filter(alarm => (alarm.frequency ?? (alarm.recurring ? 'daily' : 'once')) === group.frequency)
+      .sort((a, b) => {
+        if (group.frequency === 'hourly') {
+          return Number(b.enabled) - Number(a.enabled)
+            || a.minute - b.minute
+            || a.second - b.second;
+        }
+        const statusRank = (alarm: Alarm): number => alarm.completed ? 2 : alarm.enabled ? 0 : 1;
+        const byStatus = statusRank(a) - statusRank(b);
+        if (byStatus !== 0) return byStatus;
+        const aDistance = Math.abs(alarmSortTimestamp(a, group.frequency) - sortNow);
+        const bDistance = Math.abs(alarmSortTimestamp(b, group.frequency) - sortNow);
+        return aDistance - bDistance;
+      });
     if (groupAlarms.length === 0) return '';
     return `<section class="alarm-list__group card shadow mb-4">
       <div class="card-header bg-primary text-white"><h2 class="h5 mb-0">${group.title}</h2></div>
