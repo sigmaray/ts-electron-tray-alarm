@@ -2,6 +2,8 @@
 
 Tray Alarm is a desktop alarm clock built with Electron. It stays available from the system tray, so alarms keep running when the main window is hidden or minimized.
 
+![Tray Alarm screenshot](README/screenshot.png)
+
 ## Features
 
 - Create, edit, enable, disable, and delete alarms.
