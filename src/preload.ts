@@ -14,6 +14,7 @@ export interface Alarm {
   sound?: 'classic' | 'digital' | 'gentle';
   scheduledAt?: number;
   scheduledDate?: string;
+  dateExplicit?: boolean;
   message?: string;
   completed?: boolean;
 }

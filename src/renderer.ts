@@ -12,6 +12,7 @@ interface Alarm {
   sound?: 'classic' | 'digital' | 'gentle';
   scheduledAt?: number;
   scheduledDate?: string;
+  dateExplicit?: boolean;
   message?: string;
   completed?: boolean;
 }
@@ -94,9 +95,12 @@ function openAlarmOptions(alarmId?: string): void {
   const hourInput = document.getElementById('alarmOptionsHour') as HTMLInputElement | null;
   const minuteInput = document.getElementById('alarmOptionsMinute') as HTMLInputElement | null;
   const secondInput = document.getElementById('alarmOptionsSecond') as HTMLInputElement | null;
+  const dateField = document.getElementById('alarmOptionsDateField');
+  const dateControls = document.getElementById('alarmOptionsDateControls');
+  const setDateButton = document.getElementById('setAlarmDateBtn') as HTMLButtonElement | null;
   const frequencyInputs = Array.from(document.querySelectorAll<HTMLInputElement>('input[name="alarmFrequency"]'));
   const soundInput = document.getElementById('alarmOptionsSound') as HTMLSelectElement | null;
-  if (!overlay || !dateInput || !messageInput || !hourInput || !minuteInput || !secondInput) return;
+  if (!overlay || !dateInput || !dateField || !dateControls || !setDateButton || !messageInput || !hourInput || !minuteInput || !secondInput) return;
   optionsAlarmId = alarmId ?? null;
   const tz = getEffectiveTimezoneForQuick();
   if (alarmId) {
@@ -108,7 +112,10 @@ function openAlarmOptions(alarmId?: string): void {
     secondInput.value = String(time.second).padStart(2, '0');
     const frequency = alarm.frequency ?? (alarm.recurring ? 'daily' : 'once');
     frequencyInputs.forEach(input => input.checked = input.value === frequency);
-    dateInput.value = alarm.scheduledDate ?? (alarm.scheduledAt === undefined ? '' : dateInTimezone(tz, alarm.scheduledAt));
+    const dateWasExplicit = frequency === 'once' && (alarm.dateExplicit ?? alarm.scheduledDate !== undefined);
+    dateInput.value = dateWasExplicit ? (alarm.scheduledDate ?? (alarm.scheduledAt === undefined ? '' : dateInTimezone(tz, alarm.scheduledAt))) : '';
+    dateField.hidden = !dateWasExplicit;
+    setDateButton.hidden = dateWasExplicit;
     messageInput.value = alarm.message ?? '';
     if (soundInput) soundInput.value = alarm.sound ?? 'classic';
     const mode = alarm.notificationMode ?? 'window';
@@ -122,6 +129,9 @@ function openAlarmOptions(alarmId?: string): void {
     secondInput.value = String(time.second).padStart(2, '0');
     frequencyInputs.forEach(input => input.checked = input.value === 'once');
     dateInput.value = pendingNewAlarmDate ?? (pendingNewAlarmScheduledAt === undefined ? '' : dateInTimezone(tz, pendingNewAlarmScheduledAt));
+    const dateWasExplicit = !!dateInput.value;
+    dateField.hidden = !dateWasExplicit;
+    setDateButton.hidden = dateWasExplicit;
     messageInput.value = pendingNewAlarmMessage;
     if (soundInput) soundInput.value = 'classic';
     (document.getElementById('notificationWindow') as HTMLInputElement).checked = true;
@@ -131,8 +141,12 @@ function openAlarmOptions(alarmId?: string): void {
   minuteInput.oninput = updateHourlyLabel;
   updateHourlyLabel();
   const updateFrequencyFields = () => {
-    const hourly = frequencyInputs.find(input => input.checked)?.value === 'hourly';
-    dateInput.disabled = hourly;
+    const selectedFrequency = frequencyInputs.find(input => input.checked)?.value;
+    const hourly = selectedFrequency === 'hourly';
+    const once = selectedFrequency === 'once';
+    dateControls.hidden = !once;
+    dateField.hidden = !once || !dateInput.value;
+    setDateButton.hidden = !once || !!dateInput.value;
     const timeGroup = hourInput.parentElement?.parentElement;
     if (timeGroup) {
       (timeGroup.children[0] as HTMLElement).hidden = hourly;
@@ -143,6 +157,25 @@ function openAlarmOptions(alarmId?: string): void {
     if (hourly) { hourInput.value = '00'; secondInput.value = '00'; }
   };
   frequencyInputs.forEach(input => input.onchange = updateFrequencyFields);
+  setDateButton.onclick = () => {
+    if (!dateInput.value) {
+      const existingAlarm = alarmId ? alarms.find(item => item.id === alarmId) : undefined;
+      dateInput.value = existingAlarm?.scheduledDate ?? dateInTimezone(tz, Date.now());
+    }
+    dateField.hidden = false;
+    setDateButton.hidden = true;
+  };
+  const removeDateButton = document.getElementById('removeAlarmDateBtn') as HTMLButtonElement | null;
+  if (removeDateButton) removeDateButton.onclick = () => {
+    dateInput.value = '';
+    dateField.hidden = true;
+    setDateButton.hidden = false;
+  };
+  dateInput.onchange = () => {
+    const hasDate = dateInput.value !== '';
+    dateField.hidden = !hasDate;
+    setDateButton.hidden = hasDate;
+  };
   updateFrequencyFields();
   overlay.classList.add('modal-overlay--visible', 'show');
 }
@@ -158,7 +191,7 @@ async function saveAlarmOptions(): Promise<void> {
   const notificationMode = document.querySelector<HTMLInputElement>('input[name="notificationMode"]:checked')?.value as 'system' | 'window' | 'both' | undefined;
   const sound = (document.getElementById('alarmOptionsSound') as HTMLSelectElement).value as Alarm['sound'];
   if (!overlay || !dateInput || !messageInput || !hourInput || !minuteInput || !secondInput || !frequency || !notificationMode) return;
-  const date = dateInput.value || undefined;
+  const date = frequency === 'once' ? dateInput.value || undefined : undefined;
   const message = messageInput.value.trim() || undefined;
   const hour = Number(hourInput.value);
   const minute = Number(minuteInput.value);
@@ -186,10 +219,12 @@ async function saveAlarmOptions(): Promise<void> {
   if (alarm) {
     const electronAPI = (window as any).electronAPI as ElectronAPI | undefined;
     if (!electronAPI) return;
+    const previousExplicitDate = alarm.dateExplicit ? alarm.scheduledDate : undefined;
     const scheduleChanged = hour !== alarm.hour || minute !== alarm.minute || second !== alarm.second
-      || frequency !== (alarm.frequency ?? (alarm.recurring ? 'daily' : 'once')) || date !== alarm.scheduledDate;
+      || frequency !== (alarm.frequency ?? (alarm.recurring ? 'daily' : 'once')) || date !== previousExplicitDate;
     const result = await electronAPI.updateAlarm({
       ...alarm, hour, minute, second, recurring, frequency, notificationMode, sound,
+      dateExplicit: date !== undefined,
       scheduledDate: frequency === 'hourly' ? undefined : date, scheduledAt, message,
       completed: alarm.completed && !scheduleChanged ? true : undefined,
     });
@@ -205,6 +240,7 @@ async function saveAlarmOptions(): Promise<void> {
       enabled: true,
       recurring,
       frequency, notificationMode, sound,
+      dateExplicit: date !== undefined,
       scheduledAt,
       scheduledDate: frequency === 'hourly' ? undefined : date,
       message,
@@ -445,6 +481,12 @@ function dismissAlarm(): void {
   }
 }
 
+function clearPendingNewAlarm(): void {
+  pendingNewAlarmScheduledAt = undefined;
+  pendingNewAlarmDate = undefined;
+  pendingNewAlarmMessage = '';
+}
+
 // Expose functions used by alarm list buttons.
 (window as any).editAlarm = editAlarm;
 (window as any).openAlarmOptions = openAlarmOptions;
@@ -455,7 +497,10 @@ function dismissAlarm(): void {
 document.addEventListener('DOMContentLoaded', () => {
   const electronAPI = (window as any).electronAPI as ElectronAPI | undefined;
   const optionsOverlay = document.getElementById('alarmOptionsOverlay');
-  document.getElementById('addAlarmBtn')?.addEventListener('click', () => openAlarmOptions());
+  document.getElementById('addAlarmBtn')?.addEventListener('click', () => {
+    clearPendingNewAlarm();
+    openAlarmOptions();
+  });
   document.getElementById('alarmOptionsSaveBtn')?.addEventListener('click', saveAlarmOptions);
   document.querySelectorAll<HTMLButtonElement>('[data-reminder-seconds]').forEach(button => {
     button.addEventListener('click', () => {
@@ -486,11 +531,13 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('alarmOptionsCancelBtn')?.addEventListener('click', () => {
     optionsOverlay?.classList.remove('modal-overlay--visible', 'show');
     optionsAlarmId = null;
+    clearPendingNewAlarm();
   });
   optionsOverlay?.addEventListener('click', event => {
     if (event.target === optionsOverlay) {
       optionsOverlay.classList.remove('modal-overlay--visible', 'show');
       optionsAlarmId = null;
+      clearPendingNewAlarm();
     }
   });
   if (electronAPI) {

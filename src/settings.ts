@@ -15,6 +15,7 @@ export interface Alarm {
   sound?: 'classic' | 'digital' | 'gentle';
   scheduledAt?: number;
   scheduledDate?: string;
+  dateExplicit?: boolean;
   message?: string;
   completed?: boolean;
 }
@@ -77,6 +78,9 @@ function parseAlarm(raw: unknown): Alarm | null {
     ...(item.sound === 'classic' || item.sound === 'digital' || item.sound === 'gentle' ? { sound: item.sound } : {}),
     ...(scheduledAt === undefined ? {} : { scheduledAt }),
     ...(isValidDate(item.scheduledDate) ? { scheduledDate: item.scheduledDate as string } : {}),
+    ...(typeof item.dateExplicit === 'boolean'
+      ? { dateExplicit: item.dateExplicit }
+      : (isValidDate(item.scheduledDate) ? { dateExplicit: true } : {})),
     ...(typeof item.message === 'string' ? { message: item.message.slice(0, 500) } : {}),
     ...(item.completed === true ? { completed: true } : {}),
   };
@@ -126,6 +130,7 @@ export function isValidAlarmPayload(value: unknown): value is Alarm {
     && (alarm.sound === undefined || alarm.sound === 'classic' || alarm.sound === 'digital' || alarm.sound === 'gentle')
     && (alarm.scheduledAt === undefined || (typeof alarm.scheduledAt === 'number' && Number.isFinite(alarm.scheduledAt) && Math.abs(alarm.scheduledAt) <= 8.64e15))
     && (alarm.scheduledDate === undefined || isValidDate(alarm.scheduledDate))
+    && (alarm.dateExplicit === undefined || typeof alarm.dateExplicit === 'boolean')
     && (alarm.message === undefined || (typeof alarm.message === 'string' && alarm.message.length <= 500))
     && (alarm.completed === undefined || typeof alarm.completed === 'boolean');
 }

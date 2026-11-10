@@ -142,8 +142,16 @@
                     <div class="form-check"><input class="form-check-input" type="radio" name="notificationMode" id="notificationSystem" value="system"><label class="form-check-label" for="notificationSystem">System notification</label></div>
                     <div class="form-check"><input class="form-check-input" type="radio" name="notificationMode" id="notificationBoth" value="both"><label class="form-check-label" for="notificationBoth">Both</label></div>
                 </div>
-                <label class="alarm-options__label form-label" for="alarmOptionsDate">Date (optional)</label>
-                <input type="date" id="alarmOptionsDate" class="form-control mb-3">
+                <div id="alarmOptionsDateControls" class="mb-3">
+                    <button id="setAlarmDateBtn" class="btn btn-sm btn-outline-secondary mb-2" type="button">Set date</button>
+                    <div id="alarmOptionsDateField" hidden>
+                    <label class="alarm-options__label form-label" for="alarmOptionsDate">Date (optional)</label>
+                    <div class="input-group">
+                        <input type="date" id="alarmOptionsDate" class="form-control">
+                        <button id="removeAlarmDateBtn" class="btn btn-outline-danger" type="button" aria-label="Remove date" title="Remove date">×</button>
+                    </div>
+                    </div>
+                </div>
                 <label class="alarm-options__label form-label" for="alarmOptionsMessage">Notification text (optional)</label>
                 <textarea id="alarmOptionsMessage" class="form-control" rows="3" maxlength="500" placeholder="Shown when the alarm goes off"></textarea>
                 <label class="form-label mt-3" for="alarmOptionsSound">Sound</label>
@@ -157,16 +165,18 @@
             </div>
         </div>
 
-        <div class="app-info alert alert-info mt-4" role="note">
-            <p class="app-info__paragraph"><strong>Instructions:</strong></p>
-            <p class="app-info__paragraph">• Set the time in 24-hour format (00:00:00–23:59:59)</p>
-            <p class="app-info__paragraph">• Choose one-time, daily, or hourly alarms</p>
-            <p class="app-info__paragraph">• Use the toggle to enable or disable an alarm</p>
-            <p class="app-info__paragraph">• Select "Edit" to change alarm settings</p>
-            <p class="app-info__paragraph">• Choose a system notification or an always-on-top alarm window</p>
-            <p class="app-info__paragraph">• The system tray shows the time remaining until the next alarm</p>
-            <p class="app-info__paragraph">• Minimize the app to the system tray to keep alarms running</p>
-        </div>
+        <details class="app-info alert alert-info mt-4" role="note">
+            <summary class="app-info__summary fw-semibold">Instructions</summary>
+            <div class="app-info__content mt-3">
+                <p class="app-info__paragraph">• Set the time in 24-hour format (00:00:00–23:59:59)</p>
+                <p class="app-info__paragraph">• Choose one-time, daily, or hourly alarms</p>
+                <p class="app-info__paragraph">• Use the toggle to enable or disable an alarm</p>
+                <p class="app-info__paragraph">• Select "Edit" to change alarm settings</p>
+                <p class="app-info__paragraph">• Choose a system notification or an always-on-top alarm window</p>
+                <p class="app-info__paragraph">• The system tray shows the time remaining until the next alarm</p>
+                <p class="app-info__paragraph mb-0">• Minimize the app to the system tray to keep alarms running</p>
+            </div>
+        </details>
     </main>
 
     <script src="time.js"></script>
